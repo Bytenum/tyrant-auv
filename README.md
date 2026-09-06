@@ -1,5 +1,6 @@
 # tyrant-auv
 Autonomous Underwater Vehicle development platform
+# structure
 tyrant-auv/
 ├── README.md               # Dokumentasi utama repositori
 ├── .gitignore              # Daftar file yang diabaikan oleh Git
@@ -13,7 +14,7 @@ tyrant-auv/
 │   ├── teensy/             # Firmware Teensy (pembacaan sensor & kendali aktuator)
 │   └── esp32/              # Firmware ESP32 (telemetri & IoT)
 ├── companion/              # Kode untuk Companion Computer (High-level)
-│   └── raspberry-pi/       # Skrip pemrosesan data utama (ROS/komunikasi tingkat tinggi)
+│   └── raspberry-pi/       # Skrip pemrosesan data utama (ROS/komunikasi)
 ├── simulation/             # Lingkungan simulasi wahana
 │   ├── dynamics/           # Model dinamika AUV (surge, sway, heave, dll.)
 │   ├── sensors/            # Pemodelan sensor virtual
