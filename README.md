@@ -1,6 +1,7 @@
 # tyrant-auv
 Autonomous Underwater Vehicle development platform
 # structure
+<pre>
 tyrant-auv/
 ├── README.md               # Dokumentasi utama repositori
 ├── .gitignore              # Daftar file yang diabaikan oleh Git
@@ -24,3 +25,4 @@ tyrant-auv/
 ├── gcs/                    # Ground Control Station (UI dan pemantauan darat)
 ├── tools/                  # Script utilitas (build, kalibrasi, logging)
 └── tests/                  # Unit test dan integration test
+</pre>
