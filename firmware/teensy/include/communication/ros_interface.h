@@ -2,8 +2,13 @@
 
 #include <Arduino.h>
 
+
 namespace TyrantROS
 {
+    // ========================================================
+    // CUSTOM APPLICATION DATA
+    // ========================================================
+
     struct ModeRequestData
     {
         uint32_t request_id;
@@ -12,34 +17,68 @@ namespace TyrantROS
 
 
     // ========================================================
-    // CONNECTION LIFECYCLE
+    // MICRO-ROS TRANSPORT / CONNECTION LIFECYCLE
     // ========================================================
 
+    // Configure physical serial transport.
+    // Called once during Teensy boot.
     void setupTransport();
 
+
+    // Check whether micro-ROS Agent is reachable.
     bool pingAgent(
         uint32_t timeout_ms,
         uint8_t attempts
     );
 
+
+    // Create node, publishers, subscribers and executor.
     bool createEntities();
 
+
+    // Destroy all ROS entities.
+    // Used by automatic reconnect lifecycle.
     void destroyEntities();
 
+
+    // True when ROS entities are fully initialized.
     bool entitiesReady();
 
+
+    // Process incoming subscriptions.
     void spin();
 
 
     // ========================================================
-    // APPLICATION COMMUNICATION
+    // TEENSY HEARTBEAT
     // ========================================================
 
     void publishHeartbeat();
 
+
+    // ========================================================
+    // LEGACY COMMUNICATION DIAGNOSTIC
+    // ========================================================
+
     void publishResponse(
         uint32_t value
     );
+
+
+    bool hasNewCommand();
+
+
+    uint32_t getLastCommand();
+
+
+    // ========================================================
+    // TYRANT MODE COMMUNICATION
+    // ========================================================
+
+    bool takeModeRequest(
+        ModeRequestData &request
+    );
+
 
     void publishModeStatus(
         uint32_t request_id,
@@ -52,20 +91,25 @@ namespace TyrantROS
     );
 
 
-    // Legacy diagnostic
-    bool hasNewCommand();
+    // ========================================================
+    // HOST HEARTBEAT
+    // ========================================================
 
-    uint32_t getLastCommand();
-
-
-    // Production mode request
-    bool takeModeRequest(
-        ModeRequestData &request
-    );
-
-
-    // Host health
     bool hasNewHostHeartbeat();
 
+
     uint32_t getHostHeartbeatValue();
+
+
+    // ========================================================
+    // SYSTEM HEALTH TELEMETRY
+    // ========================================================
+
+    void publishSystemHealth(
+        bool communication_healthy,
+        bool autonomy_ready,
+        bool propulsion_allowed,
+        uint8_t current_mode,
+        uint32_t host_heartbeat_age_ms
+    );
 }

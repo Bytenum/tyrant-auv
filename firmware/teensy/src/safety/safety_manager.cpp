@@ -246,4 +246,18 @@ namespace TyrantSafety
 
         return true;
     }
+   uint32_t hostHeartbeatAgeMs()
+    {
+    if (!host_heartbeat_received)
+    {
+        return 0xFFFFFFFFu;
+    }
+
+    const unsigned long now =
+        millis();
+
+    return static_cast<uint32_t>(
+        now - last_host_heartbeat_ms
+    );
+    }
 }

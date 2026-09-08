@@ -199,7 +199,27 @@ void loop()
             TyrantROS::publishHeartbeat();
         }
     }
+    // ========================================================
+    // SYSTEM HEALTH TELEMETRY — 5 Hz
+    // ========================================================
 
+    if (
+        TyrantScheduler::healthDue()
+    )
+    {
+        if (
+            TyrantConnection::connected()
+        )
+        {
+            TyrantROS::publishSystemHealth(
+                TyrantSafety::communicationHealthy(),
+                TyrantSafety::autonomyReady(),
+                TyrantSafety::propulsionAllowed(),
+                TyrantSafety::getMode(),
+                TyrantSafety::hostHeartbeatAgeMs()
+            );
+        }
+    }
 
     // ========================================================
     // SAFETY TASK

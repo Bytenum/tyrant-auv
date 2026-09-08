@@ -8,6 +8,8 @@ namespace TyrantScheduler
 
     bool heartbeatDue();
 
+    bool healthDue();
+
     bool safetyDue();
 
     bool controlDue();

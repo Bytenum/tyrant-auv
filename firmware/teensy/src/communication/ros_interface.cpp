@@ -12,106 +12,164 @@
 
 #include <tyrant_interfaces/msg/mode_request.h>
 #include <tyrant_interfaces/msg/mode_status.h>
+#include <tyrant_interfaces/msg/system_health.h>
 
+
+// ============================================================
+// PRIVATE INTERNAL STORAGE
+// ============================================================
 
 namespace
 {
     // ========================================================
-    // ROS CORE
+    // ROS CORE OBJECTS
     // ========================================================
 
     rcl_node_t node =
         rcl_get_zero_initialized_node();
 
-    rcl_publisher_t heartbeat_publisher =
-        rcl_get_zero_initialized_publisher();
-
-    rcl_publisher_t response_publisher =
-        rcl_get_zero_initialized_publisher();
-
-    rcl_publisher_t mode_status_publisher =
-        rcl_get_zero_initialized_publisher();
-
-    rcl_subscription_t command_subscriber =
-        rcl_get_zero_initialized_subscription();
-
-    rcl_subscription_t mode_request_subscriber =
-        rcl_get_zero_initialized_subscription();
-
-    rcl_subscription_t host_heartbeat_subscriber =
-        rcl_get_zero_initialized_subscription();
 
     rclc_support_t support {};
 
     rcl_allocator_t allocator;
+
 
     rclc_executor_t executor =
         rclc_executor_get_zero_initialized_executor();
 
 
     // ========================================================
-    // INITIALIZATION FLAGS
+    // PUBLISHERS
+    // ========================================================
+
+    rcl_publisher_t heartbeat_publisher =
+        rcl_get_zero_initialized_publisher();
+
+
+    rcl_publisher_t response_publisher =
+        rcl_get_zero_initialized_publisher();
+
+
+    rcl_publisher_t mode_status_publisher =
+        rcl_get_zero_initialized_publisher();
+
+
+    rcl_publisher_t system_health_publisher =
+        rcl_get_zero_initialized_publisher();
+
+
+    // ========================================================
+    // SUBSCRIBERS
+    // ========================================================
+
+    rcl_subscription_t command_subscriber =
+        rcl_get_zero_initialized_subscription();
+
+
+    rcl_subscription_t mode_request_subscriber =
+        rcl_get_zero_initialized_subscription();
+
+
+    rcl_subscription_t host_heartbeat_subscriber =
+        rcl_get_zero_initialized_subscription();
+
+
+    // ========================================================
+    // ENTITY INITIALIZATION FLAGS
+    //
+    // Dipakai supaya destroyEntities() aman walaupun
+    // createEntities() hanya berhasil sebagian.
     // ========================================================
 
     bool support_initialized = false;
 
     bool node_initialized = false;
 
+
     bool heartbeat_pub_initialized = false;
+
     bool response_pub_initialized = false;
+
     bool mode_status_pub_initialized = false;
 
+    bool system_health_pub_initialized = false;
+
+
     bool command_sub_initialized = false;
+
     bool mode_request_sub_initialized = false;
+
     bool host_heartbeat_sub_initialized = false;
+
 
     bool executor_initialized = false;
 
+
     bool mode_request_msg_initialized = false;
+
     bool mode_status_msg_initialized = false;
+
+    bool system_health_msg_initialized = false;
+
 
     bool entities_ready = false;
 
 
     // ========================================================
-    // STANDARD MESSAGES
+    // STANDARD ROS MESSAGE STORAGE
     // ========================================================
 
     std_msgs__msg__UInt32 heartbeat_msg;
+
     std_msgs__msg__UInt32 response_msg;
+
     std_msgs__msg__UInt32 command_msg;
+
     std_msgs__msg__UInt32 host_heartbeat_msg;
 
 
     // ========================================================
-    // TYRANT MESSAGES
+    // TYRANT CUSTOM MESSAGE STORAGE
     // ========================================================
 
     tyrant_interfaces__msg__ModeRequest
         mode_request_msg;
 
+
     tyrant_interfaces__msg__ModeStatus
         mode_status_msg;
 
 
+    tyrant_interfaces__msg__SystemHealth
+        system_health_msg;
+
+
     // ========================================================
-    // APPLICATION DATA
+    // APPLICATION DATA / FLAGS
     // ========================================================
 
     bool new_command = false;
+
     uint32_t last_command = 0;
+
 
     bool new_mode_request = false;
 
     uint32_t requested_mode_id = 0;
+
     uint8_t requested_mode = 0;
 
+
     bool new_host_heartbeat = false;
+
     uint32_t host_heartbeat_value = 0;
 
 
     // ========================================================
-    // RETURN VALUE HELPER
+    // HELPER
+    //
+    // Untuk mengonsumsi return value dari fungsi rcl_*_fini
+    // sehingga compiler tidak memberi warning unused-result.
     // ========================================================
 
     void consumeRet(rcl_ret_t ret)
@@ -121,7 +179,7 @@ namespace
 
 
     // ========================================================
-    // CALLBACKS
+    // CALLBACK: LEGACY TEST COMMAND
     // ========================================================
 
     void commandCallback(
@@ -133,12 +191,18 @@ namespace
                 const std_msgs__msg__UInt32 *
             >(msgin);
 
+
         last_command =
             received->data;
+
 
         new_command = true;
     }
 
+
+    // ========================================================
+    // CALLBACK: CUSTOM MODE REQUEST
+    // ========================================================
 
     void modeRequestCallback(
         const void *msgin
@@ -149,15 +213,22 @@ namespace
                 const tyrant_interfaces__msg__ModeRequest *
             >(msgin);
 
+
         requested_mode_id =
             received->request_id;
+
 
         requested_mode =
             received->requested_mode;
 
+
         new_mode_request = true;
     }
 
+
+    // ========================================================
+    // CALLBACK: HOST HEARTBEAT
+    // ========================================================
 
     void hostHeartbeatCallback(
         const void *msgin
@@ -168,45 +239,73 @@ namespace
                 const std_msgs__msg__UInt32 *
             >(msgin);
 
+
         host_heartbeat_value =
             received->data;
+
 
         new_host_heartbeat = true;
     }
 
 
+    // ========================================================
+    // RESET APPLICATION FLAGS
+    // ========================================================
+
     void resetApplicationFlags()
     {
         new_command = false;
+
         last_command = 0;
 
+
         new_mode_request = false;
+
         requested_mode_id = 0;
+
         requested_mode = 0;
 
+
         new_host_heartbeat = false;
+
         host_heartbeat_value = 0;
     }
 }
 
 
+// ============================================================
+// PUBLIC TYRANT ROS API
+// ============================================================
+
 namespace TyrantROS
 {
     // ========================================================
-    // TRANSPORT
+    // SETUP PHYSICAL MICRO-ROS TRANSPORT
+    //
+    // Dipanggil sekali saat Teensy boot.
+    //
+    // ROS entities TIDAK dibuat di sini.
+    // ConnectionManager yang menentukan kapan entity dibuat.
     // ========================================================
 
     void setupTransport()
     {
         Serial.begin(115200);
 
+
+        // Beri waktu USB serial settle.
         delay(2000);
+
 
         set_microros_serial_transports(
             Serial
         );
     }
 
+
+    // ========================================================
+    // PING MICRO-ROS AGENT
+    // ========================================================
 
     bool pingAgent(
         uint32_t timeout_ms,
@@ -217,17 +316,22 @@ namespace TyrantROS
             rmw_uros_ping_agent(
                 timeout_ms,
                 attempts
-            ) == RMW_RET_OK
+            )
+            ==
+            RMW_RET_OK
         );
     }
 
 
     // ========================================================
-    // CREATE ROS ENTITIES
+    // CREATE ALL ROS ENTITIES
+    //
+    // Dipanggil ConnectionManager setelah Agent ditemukan.
     // ========================================================
 
     bool createEntities()
     {
+        // Jangan create dua kali.
         if (entities_ready)
         {
             return true;
@@ -238,9 +342,9 @@ namespace TyrantROS
             rcl_get_default_allocator();
 
 
-        // ----------------------------------------------------
-        // Custom message memory
-        // ----------------------------------------------------
+        // ====================================================
+        // INITIALIZE CUSTOM MESSAGE MEMORY
+        // ====================================================
 
         if (
             !tyrant_interfaces__msg__ModeRequest__init(
@@ -249,10 +353,13 @@ namespace TyrantROS
         )
         {
             destroyEntities();
+
             return false;
         }
 
-        mode_request_msg_initialized = true;
+
+        mode_request_msg_initialized =
+            true;
 
 
         if (
@@ -262,15 +369,34 @@ namespace TyrantROS
         )
         {
             destroyEntities();
+
             return false;
         }
 
-        mode_status_msg_initialized = true;
+
+        mode_status_msg_initialized =
+            true;
 
 
-        // ----------------------------------------------------
-        // ROS support
-        // ----------------------------------------------------
+        if (
+            !tyrant_interfaces__msg__SystemHealth__init(
+                &system_health_msg
+            )
+        )
+        {
+            destroyEntities();
+
+            return false;
+        }
+
+
+        system_health_msg_initialized =
+            true;
+
+
+        // ====================================================
+        // RCLC SUPPORT
+        // ====================================================
 
         if (
             rclc_support_init(
@@ -278,19 +404,24 @@ namespace TyrantROS
                 0,
                 nullptr,
                 &allocator
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
-        support_initialized = true;
+
+        support_initialized =
+            true;
 
 
-        // ----------------------------------------------------
-        // Node
-        // ----------------------------------------------------
+        // ====================================================
+        // NODE
+        // ====================================================
 
         if (
             rclc_node_init_default(
@@ -298,19 +429,28 @@ namespace TyrantROS
                 "tyrant_teensy",
                 "",
                 &support
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
-        node_initialized = true;
+
+        node_initialized =
+            true;
 
 
-        // ----------------------------------------------------
-        // Heartbeat publisher
-        // ----------------------------------------------------
+        // ====================================================
+        // PUBLISHER:
+        // /tyrant/heartbeat
+        //
+        // Type:
+        // std_msgs/msg/UInt32
+        // ====================================================
 
         if (
             rclc_publisher_init_default(
@@ -322,19 +462,27 @@ namespace TyrantROS
                     UInt32
                 ),
                 "/tyrant/heartbeat"
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
-        heartbeat_pub_initialized = true;
+
+        heartbeat_pub_initialized =
+            true;
 
 
-        // ----------------------------------------------------
-        // Legacy test response publisher
-        // ----------------------------------------------------
+        // ====================================================
+        // PUBLISHER:
+        // /tyrant/test_response
+        //
+        // Legacy communication diagnostic.
+        // ====================================================
 
         if (
             rclc_publisher_init_default(
@@ -346,19 +494,27 @@ namespace TyrantROS
                     UInt32
                 ),
                 "/tyrant/test_response"
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
-        response_pub_initialized = true;
+
+        response_pub_initialized =
+            true;
 
 
-        // ----------------------------------------------------
-        // CUSTOM MODE STATUS PUBLISHER
-        // ----------------------------------------------------
+        // ====================================================
+        // PUBLISHER:
+        // /tyrant/mode/status
+        //
+        // Custom Tyrant message.
+        // ====================================================
 
         if (
             rclc_publisher_init_default(
@@ -370,19 +526,59 @@ namespace TyrantROS
                     ModeStatus
                 ),
                 "/tyrant/mode/status"
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
-        mode_status_pub_initialized = true;
+
+        mode_status_pub_initialized =
+            true;
 
 
-        // ----------------------------------------------------
-        // Legacy diagnostic subscriber
-        // ----------------------------------------------------
+        // ====================================================
+        // PUBLISHER:
+        // /tyrant/system/health
+        //
+        // Custom Tyrant health telemetry.
+        // ====================================================
+
+        if (
+            rclc_publisher_init_default(
+                &system_health_publisher,
+                &node,
+                ROSIDL_GET_MSG_TYPE_SUPPORT(
+                    tyrant_interfaces,
+                    msg,
+                    SystemHealth
+                ),
+                "/tyrant/system/health"
+            )
+            !=
+            RCL_RET_OK
+        )
+        {
+            destroyEntities();
+
+            return false;
+        }
+
+
+        system_health_pub_initialized =
+            true;
+
+
+        // ====================================================
+        // SUBSCRIBER:
+        // /tyrant/test_command
+        //
+        // Legacy communication diagnostic.
+        // ====================================================
 
         if (
             rclc_subscription_init_default(
@@ -394,19 +590,27 @@ namespace TyrantROS
                     UInt32
                 ),
                 "/tyrant/test_command"
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
-        command_sub_initialized = true;
+
+        command_sub_initialized =
+            true;
 
 
-        // ----------------------------------------------------
-        // CUSTOM MODE REQUEST SUBSCRIBER
-        // ----------------------------------------------------
+        // ====================================================
+        // SUBSCRIBER:
+        // /tyrant/mode/request
+        //
+        // Custom Tyrant ModeRequest.
+        // ====================================================
 
         if (
             rclc_subscription_init_default(
@@ -418,19 +622,25 @@ namespace TyrantROS
                     ModeRequest
                 ),
                 "/tyrant/mode/request"
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
-        mode_request_sub_initialized = true;
+
+        mode_request_sub_initialized =
+            true;
 
 
-        // ----------------------------------------------------
-        // Host heartbeat subscriber
-        // ----------------------------------------------------
+        // ====================================================
+        // SUBSCRIBER:
+        // /tyrant/host_heartbeat
+        // ====================================================
 
         if (
             rclc_subscription_init_default(
@@ -442,27 +652,38 @@ namespace TyrantROS
                     UInt32
                 ),
                 "/tyrant/host_heartbeat"
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
-        host_heartbeat_sub_initialized = true;
+
+        host_heartbeat_sub_initialized =
+            true;
 
 
-        // ----------------------------------------------------
-        // Executor
+        // ====================================================
+        // EXECUTOR
         //
-        // Three subscribers:
-        // test command
-        // ModeRequest
-        // host heartbeat
-        // ----------------------------------------------------
+        // Hanya subscriber yang memakai executor handle.
+        //
+        // Subscriber kita:
+        //
+        // 1. test_command
+        // 2. ModeRequest
+        // 3. host_heartbeat
+        //
+        // Maka handle count tetap = 3.
+        // ====================================================
 
         executor =
             rclc_executor_get_zero_initialized_executor();
+
 
         if (
             rclc_executor_init(
@@ -470,15 +691,24 @@ namespace TyrantROS
                 &support.context,
                 3,
                 &allocator
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
-        executor_initialized = true;
 
+        executor_initialized =
+            true;
+
+
+        // ====================================================
+        // ADD TEST COMMAND SUBSCRIBER
+        // ====================================================
 
         if (
             rclc_executor_add_subscription(
@@ -487,13 +717,20 @@ namespace TyrantROS
                 &command_msg,
                 &commandCallback,
                 ON_NEW_DATA
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
+
+        // ====================================================
+        // ADD MODE REQUEST SUBSCRIBER
+        // ====================================================
 
         if (
             rclc_executor_add_subscription(
@@ -502,13 +739,20 @@ namespace TyrantROS
                 &mode_request_msg,
                 &modeRequestCallback,
                 ON_NEW_DATA
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
+
+        // ====================================================
+        // ADD HOST HEARTBEAT SUBSCRIBER
+        // ====================================================
 
         if (
             rclc_executor_add_subscription(
@@ -517,35 +761,61 @@ namespace TyrantROS
                 &host_heartbeat_msg,
                 &hostHeartbeatCallback,
                 ON_NEW_DATA
-            ) != RCL_RET_OK
+            )
+            !=
+            RCL_RET_OK
         )
         {
             destroyEntities();
+
             return false;
         }
 
 
-        heartbeat_msg.data = 0;
-        response_msg.data = 0;
+        // ====================================================
+        // INITIAL MESSAGE VALUES
+        // ====================================================
+
+        heartbeat_msg.data =
+            0;
+
+
+        response_msg.data =
+            0;
+
 
         resetApplicationFlags();
 
-        entities_ready = true;
+
+        entities_ready =
+            true;
+
 
         return true;
     }
 
 
     // ========================================================
-    // DESTROY ROS ENTITIES
+    // DESTROY ALL ROS ENTITIES
+    //
+    // Dipanggil ketika Agent hilang.
+    //
+    // Setelah ini ConnectionManager dapat menunggu Agent baru
+    // dan memanggil createEntities() lagi TANPA reset Teensy.
     // ========================================================
 
     void destroyEntities()
     {
-        entities_ready = false;
+        entities_ready =
+            false;
+
 
         resetApplicationFlags();
 
+
+        // ====================================================
+        // JANGAN MENUNGGU REMOTE DESTROY JIKA AGENT SUDAH MATI
+        // ====================================================
 
         if (support_initialized)
         {
@@ -553,6 +823,7 @@ namespace TyrantROS
                 rcl_context_get_rmw_context(
                     &support.context
                 );
+
 
             if (rmw_context != nullptr)
             {
@@ -565,53 +836,34 @@ namespace TyrantROS
         }
 
 
-        if (heartbeat_pub_initialized)
+        // ====================================================
+        // EXECUTOR
+        //
+        // Fini executor lebih dulu karena dia memegang
+        // handle terhadap subscriber.
+        // ====================================================
+
+        if (executor_initialized)
         {
             consumeRet(
-                rcl_publisher_fini(
-                    &heartbeat_publisher,
-                    &node
+                rclc_executor_fini(
+                    &executor
                 )
             );
 
-            heartbeat_pub_initialized = false;
 
-            heartbeat_publisher =
-                rcl_get_zero_initialized_publisher();
+            executor_initialized =
+                false;
+
+
+            executor =
+                rclc_executor_get_zero_initialized_executor();
         }
 
 
-        if (response_pub_initialized)
-        {
-            consumeRet(
-                rcl_publisher_fini(
-                    &response_publisher,
-                    &node
-                )
-            );
-
-            response_pub_initialized = false;
-
-            response_publisher =
-                rcl_get_zero_initialized_publisher();
-        }
-
-
-        if (mode_status_pub_initialized)
-        {
-            consumeRet(
-                rcl_publisher_fini(
-                    &mode_status_publisher,
-                    &node
-                )
-            );
-
-            mode_status_pub_initialized = false;
-
-            mode_status_publisher =
-                rcl_get_zero_initialized_publisher();
-        }
-
+        // ====================================================
+        // SUBSCRIBERS
+        // ====================================================
 
         if (command_sub_initialized)
         {
@@ -622,7 +874,10 @@ namespace TyrantROS
                 )
             );
 
-            command_sub_initialized = false;
+
+            command_sub_initialized =
+                false;
+
 
             command_subscriber =
                 rcl_get_zero_initialized_subscription();
@@ -638,7 +893,10 @@ namespace TyrantROS
                 )
             );
 
-            mode_request_sub_initialized = false;
+
+            mode_request_sub_initialized =
+                false;
+
 
             mode_request_subscriber =
                 rcl_get_zero_initialized_subscription();
@@ -654,27 +912,99 @@ namespace TyrantROS
                 )
             );
 
-            host_heartbeat_sub_initialized = false;
+
+            host_heartbeat_sub_initialized =
+                false;
+
 
             host_heartbeat_subscriber =
                 rcl_get_zero_initialized_subscription();
         }
 
 
-        if (executor_initialized)
+        // ====================================================
+        // PUBLISHERS
+        // ====================================================
+
+        if (heartbeat_pub_initialized)
         {
             consumeRet(
-                rclc_executor_fini(
-                    &executor
+                rcl_publisher_fini(
+                    &heartbeat_publisher,
+                    &node
                 )
             );
 
-            executor_initialized = false;
 
-            executor =
-                rclc_executor_get_zero_initialized_executor();
+            heartbeat_pub_initialized =
+                false;
+
+
+            heartbeat_publisher =
+                rcl_get_zero_initialized_publisher();
         }
 
+
+        if (response_pub_initialized)
+        {
+            consumeRet(
+                rcl_publisher_fini(
+                    &response_publisher,
+                    &node
+                )
+            );
+
+
+            response_pub_initialized =
+                false;
+
+
+            response_publisher =
+                rcl_get_zero_initialized_publisher();
+        }
+
+
+        if (mode_status_pub_initialized)
+        {
+            consumeRet(
+                rcl_publisher_fini(
+                    &mode_status_publisher,
+                    &node
+                )
+            );
+
+
+            mode_status_pub_initialized =
+                false;
+
+
+            mode_status_publisher =
+                rcl_get_zero_initialized_publisher();
+        }
+
+
+        if (system_health_pub_initialized)
+        {
+            consumeRet(
+                rcl_publisher_fini(
+                    &system_health_publisher,
+                    &node
+                )
+            );
+
+
+            system_health_pub_initialized =
+                false;
+
+
+            system_health_publisher =
+                rcl_get_zero_initialized_publisher();
+        }
+
+
+        // ====================================================
+        // NODE
+        // ====================================================
 
         if (node_initialized)
         {
@@ -684,12 +1014,19 @@ namespace TyrantROS
                 )
             );
 
-            node_initialized = false;
+
+            node_initialized =
+                false;
+
 
             node =
                 rcl_get_zero_initialized_node();
         }
 
+
+        // ====================================================
+        // SUPPORT / CONTEXT
+        // ====================================================
 
         if (support_initialized)
         {
@@ -699,15 +1036,30 @@ namespace TyrantROS
                 )
             );
 
-            support_initialized = false;
+
+            support_initialized =
+                false;
+
 
             support = {};
         }
 
 
-        // ----------------------------------------------------
-        // Custom message memory
-        // ----------------------------------------------------
+        // ====================================================
+        // CUSTOM MESSAGE MEMORY CLEANUP
+        // ====================================================
+
+        if (system_health_msg_initialized)
+        {
+            tyrant_interfaces__msg__SystemHealth__fini(
+                &system_health_msg
+            );
+
+
+            system_health_msg_initialized =
+                false;
+        }
+
 
         if (mode_status_msg_initialized)
         {
@@ -715,7 +1067,9 @@ namespace TyrantROS
                 &mode_status_msg
             );
 
-            mode_status_msg_initialized = false;
+
+            mode_status_msg_initialized =
+                false;
         }
 
 
@@ -725,10 +1079,16 @@ namespace TyrantROS
                 &mode_request_msg
             );
 
-            mode_request_msg_initialized = false;
+
+            mode_request_msg_initialized =
+                false;
         }
     }
 
+
+    // ========================================================
+    // ENTITY STATE
+    // ========================================================
 
     bool entitiesReady()
     {
@@ -737,7 +1097,7 @@ namespace TyrantROS
 
 
     // ========================================================
-    // SPIN
+    // PROCESS INCOMING ROS DATA
     // ========================================================
 
     void spin()
@@ -747,18 +1107,20 @@ namespace TyrantROS
             return;
         }
 
+
         const rcl_ret_t ret =
             rclc_executor_spin_some(
                 &executor,
                 RCL_MS_TO_NS(5)
             );
 
+
         (void)ret;
     }
 
 
     // ========================================================
-    // HEARTBEAT
+    // PUBLISH TEENSY HEARTBEAT
     // ========================================================
 
     void publishHeartbeat()
@@ -768,7 +1130,9 @@ namespace TyrantROS
             return;
         }
 
+
         heartbeat_msg.data++;
+
 
         const rcl_ret_t ret =
             rcl_publish(
@@ -776,6 +1140,7 @@ namespace TyrantROS
                 &heartbeat_msg,
                 nullptr
             );
+
 
         (void)ret;
     }
@@ -794,7 +1159,10 @@ namespace TyrantROS
             return;
         }
 
-        response_msg.data = value;
+
+        response_msg.data =
+            value;
+
 
         const rcl_ret_t ret =
             rcl_publish(
@@ -803,12 +1171,13 @@ namespace TyrantROS
                 nullptr
             );
 
+
         (void)ret;
     }
 
 
     // ========================================================
-    // CUSTOM MODE STATUS
+    // PUBLISH CUSTOM MODE STATUS
     // ========================================================
 
     void publishModeStatus(
@@ -827,33 +1196,71 @@ namespace TyrantROS
         }
 
 
-        // No ROS time synchronization yet.
-        mode_status_msg.header.stamp.sec = 0;
+        // ----------------------------------------------------
+        // Timestamp
+        //
+        // Masih 0 karena ROS time synchronization
+        // belum kita implementasikan.
+        // ----------------------------------------------------
 
-        mode_status_msg.header.stamp.nanosec = 0;
+        mode_status_msg.header.stamp.sec =
+            0;
 
+
+        mode_status_msg.header.stamp.nanosec =
+            0;
+
+
+        // frame_id dibiarkan empty string.
+
+
+        // ----------------------------------------------------
+        // Request correlation
+        // ----------------------------------------------------
 
         mode_status_msg.request_id =
             request_id;
 
+
+        // ----------------------------------------------------
+        // Vehicle mode
+        // ----------------------------------------------------
+
         mode_status_msg.current_mode =
             current_mode;
+
 
         mode_status_msg.requested_mode =
             requested_mode;
 
+
+        // ----------------------------------------------------
+        // Request result
+        // ----------------------------------------------------
+
         mode_status_msg.request_accepted =
             request_accepted;
+
 
         mode_status_msg.reason =
             reason;
 
+
+        // ----------------------------------------------------
+        // Safety information
+        // ----------------------------------------------------
+
         mode_status_msg.communication_healthy =
             communication_healthy;
+
 
         mode_status_msg.propulsion_allowed =
             propulsion_allowed;
 
+
+        // ----------------------------------------------------
+        // Publish
+        // ----------------------------------------------------
 
         const rcl_ret_t ret =
             rcl_publish(
@@ -862,12 +1269,63 @@ namespace TyrantROS
                 nullptr
             );
 
+
         (void)ret;
     }
 
 
     // ========================================================
-    // LEGACY DIAGNOSTIC
+    // PUBLISH SYSTEM HEALTH
+    // ========================================================
+
+    void publishSystemHealth(
+        bool communication_healthy,
+        bool autonomy_ready,
+        bool propulsion_allowed,
+        uint8_t current_mode,
+        uint32_t host_heartbeat_age_ms
+    )
+    {
+        if (!entities_ready)
+        {
+            return;
+        }
+
+
+        system_health_msg.communication_healthy =
+            communication_healthy;
+
+
+        system_health_msg.autonomy_ready =
+            autonomy_ready;
+
+
+        system_health_msg.propulsion_allowed =
+            propulsion_allowed;
+
+
+        system_health_msg.current_mode =
+            current_mode;
+
+
+        system_health_msg.host_heartbeat_age_ms =
+            host_heartbeat_age_ms;
+
+
+        const rcl_ret_t ret =
+            rcl_publish(
+                &system_health_publisher,
+                &system_health_msg,
+                nullptr
+            );
+
+
+        (void)ret;
+    }
+
+
+    // ========================================================
+    // LEGACY TEST COMMAND
     // ========================================================
 
     bool hasNewCommand()
@@ -878,7 +1336,9 @@ namespace TyrantROS
 
     uint32_t getLastCommand()
     {
-        new_command = false;
+        new_command =
+            false;
+
 
         return last_command;
     }
@@ -897,13 +1357,18 @@ namespace TyrantROS
             return false;
         }
 
+
         request.request_id =
             requested_mode_id;
+
 
         request.requested_mode =
             requested_mode;
 
-        new_mode_request = false;
+
+        new_mode_request =
+            false;
+
 
         return true;
     }
@@ -921,7 +1386,9 @@ namespace TyrantROS
 
     uint32_t getHostHeartbeatValue()
     {
-        new_host_heartbeat = false;
+        new_host_heartbeat =
+            false;
+
 
         return host_heartbeat_value;
     }
