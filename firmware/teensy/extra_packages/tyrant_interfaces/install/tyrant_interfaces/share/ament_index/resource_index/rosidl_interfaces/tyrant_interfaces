@@ -1,0 +1,10 @@
+msg/ModeRequest.idl
+msg/ModeRequest.msg
+msg/ModeStatus.idl
+msg/ModeStatus.msg
+msg/SystemHealth.idl
+msg/SystemHealth.msg
+msg/VehicleReference.idl
+msg/VehicleReference.msg
+msg/VehicleState.idl
+msg/VehicleState.msg

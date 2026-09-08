@@ -1,0 +1,25 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from tyrant_interfaces/msg/VehicleReference.msg
+// generated code does not contain a copyright notice
+
+#include "geometry_msgs/msg/Point.idl"
+#include "geometry_msgs/msg/Vector3.idl"
+#include "std_msgs/msg/Header.idl"
+
+module tyrant_interfaces {
+  module msg {
+    struct VehicleReference {
+      std_msgs::msg::Header header;
+
+      geometry_msgs::msg::Point position;
+
+      geometry_msgs::msg::Vector3 linear_velocity;
+
+      float roll;
+
+      float pitch;
+
+      float yaw;
+    };
+  };
+};

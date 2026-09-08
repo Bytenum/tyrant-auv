@@ -1,0 +1,20 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from tyrant_interfaces/msg/SystemHealth.msg
+// generated code does not contain a copyright notice
+
+
+module tyrant_interfaces {
+  module msg {
+    struct SystemHealth {
+      boolean communication_healthy;
+
+      boolean autonomy_ready;
+
+      boolean propulsion_allowed;
+
+      uint8 current_mode;
+
+      uint32 host_heartbeat_age_ms;
+    };
+  };
+};
