@@ -15,20 +15,37 @@ namespace TyrantVehicle
         EMERGENCY = 6
     };
 
+    enum class Reason : uint8_t
+    {
+        NONE = 0,
+        REQUEST_ACCEPTED = 1,
+        INVALID_MODE = 2,
+        TRANSITION_NOT_ALLOWED = 3,
+        SYSTEM_UNHEALTHY = 4,
+        AUTONOMY_NOT_READY = 5,
+        COMMUNICATION_TIMEOUT = 6,
+        FAULT_LATCHED = 7,
+        EMERGENCY_LATCHED = 8
+    };
+
+    struct TransitionResult
+    {
+        bool accepted;
+        Reason reason;
+    };
+
     void init();
 
     void completeBoot(bool initialization_ok);
 
-    bool requestMode(
+    TransitionResult requestMode(
         Mode requested_mode,
         bool system_healthy,
         bool autonomy_ready
     );
 
     void forceSafe();
-
     void forceFault();
-
     void forceEmergency();
 
     Mode getMode();

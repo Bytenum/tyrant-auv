@@ -4,6 +4,24 @@ namespace
 {
     TyrantVehicle::Mode current_mode =
         TyrantVehicle::Mode::BOOT;
+
+    TyrantVehicle::TransitionResult accepted()
+    {
+        return {
+            true,
+            TyrantVehicle::Reason::REQUEST_ACCEPTED
+        };
+    }
+
+    TyrantVehicle::TransitionResult rejected(
+        TyrantVehicle::Reason reason
+    )
+    {
+        return {
+            false,
+            reason
+        };
+    }
 }
 
 namespace TyrantVehicle
@@ -25,75 +43,97 @@ namespace TyrantVehicle
         }
     }
 
-    bool requestMode(
+    TransitionResult requestMode(
         Mode requested_mode,
         bool system_healthy,
         bool autonomy_ready
     )
     {
-        // Already in requested mode.
-        if (requested_mode == current_mode)
+        if (current_mode == Mode::EMERGENCY)
         {
-            return true;
+            return rejected(
+                Reason::EMERGENCY_LATCHED
+            );
         }
 
-        // BOOT, FAULT, and EMERGENCY are not normal
-        // host-commandable modes.
+        if (current_mode == Mode::FAULT)
+        {
+            return rejected(
+                Reason::FAULT_LATCHED
+            );
+        }
+
+        if (requested_mode == current_mode)
+        {
+            return accepted();
+        }
+
+        // Host cannot directly command these states.
         if (
             requested_mode == Mode::BOOT ||
             requested_mode == Mode::FAULT ||
             requested_mode == Mode::EMERGENCY
         )
         {
-            return false;
-        }
-
-        // EMERGENCY and FAULT are latched for now.
-        // Recovery logic will be designed separately.
-        if (
-            current_mode == Mode::EMERGENCY ||
-            current_mode == Mode::FAULT
-        )
-        {
-            return false;
+            return rejected(
+                Reason::TRANSITION_NOT_ALLOWED
+            );
         }
 
         // SAFE may always be requested.
         if (requested_mode == Mode::SAFE)
         {
             current_mode = Mode::SAFE;
-            return true;
+            return accepted();
         }
 
         switch (current_mode)
         {
             case Mode::BOOT:
             {
-                return false;
+                return rejected(
+                    Reason::TRANSITION_NOT_ALLOWED
+                );
             }
 
             case Mode::IDLE:
             {
-                if (
-                    requested_mode == Mode::MANUAL &&
-                    system_healthy
-                )
+                if (requested_mode == Mode::MANUAL)
                 {
+                    if (!system_healthy)
+                    {
+                        return rejected(
+                            Reason::SYSTEM_UNHEALTHY
+                        );
+                    }
+
                     current_mode = Mode::MANUAL;
-                    return true;
+                    return accepted();
                 }
 
-                if (
-                    requested_mode == Mode::AUTO &&
-                    system_healthy &&
-                    autonomy_ready
-                )
+                if (requested_mode == Mode::AUTO)
                 {
+                    if (!system_healthy)
+                    {
+                        return rejected(
+                            Reason::SYSTEM_UNHEALTHY
+                        );
+                    }
+
+                    if (!autonomy_ready)
+                    {
+                        return rejected(
+                            Reason::AUTONOMY_NOT_READY
+                        );
+                    }
+
                     current_mode = Mode::AUTO;
-                    return true;
+                    return accepted();
                 }
 
-                return false;
+                return rejected(
+                    Reason::TRANSITION_NOT_ALLOWED
+                );
             }
 
             case Mode::MANUAL:
@@ -101,10 +141,12 @@ namespace TyrantVehicle
                 if (requested_mode == Mode::IDLE)
                 {
                     current_mode = Mode::IDLE;
-                    return true;
+                    return accepted();
                 }
 
-                return false;
+                return rejected(
+                    Reason::TRANSITION_NOT_ALLOWED
+                );
             }
 
             case Mode::AUTO:
@@ -112,31 +154,41 @@ namespace TyrantVehicle
                 if (requested_mode == Mode::IDLE)
                 {
                     current_mode = Mode::IDLE;
-                    return true;
+                    return accepted();
                 }
 
-                return false;
+                return rejected(
+                    Reason::TRANSITION_NOT_ALLOWED
+                );
             }
 
             case Mode::SAFE:
             {
-                if (
-                    requested_mode == Mode::IDLE &&
-                    system_healthy
-                )
+                if (requested_mode == Mode::IDLE)
                 {
+                    if (!system_healthy)
+                    {
+                        return rejected(
+                            Reason::SYSTEM_UNHEALTHY
+                        );
+                    }
+
                     current_mode = Mode::IDLE;
-                    return true;
+                    return accepted();
                 }
 
-                return false;
+                return rejected(
+                    Reason::TRANSITION_NOT_ALLOWED
+                );
             }
 
             case Mode::FAULT:
             case Mode::EMERGENCY:
             default:
             {
-                return false;
+                return rejected(
+                    Reason::TRANSITION_NOT_ALLOWED
+                );
             }
         }
     }

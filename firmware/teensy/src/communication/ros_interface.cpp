@@ -7,7 +7,9 @@
 #include <rclc/executor.h>
 
 #include <std_msgs/msg/u_int32.h>
-#include <std_msgs/msg/u_int8.h>
+
+#include <tyrant_interfaces/msg/mode_request.h>
+#include <tyrant_interfaces/msg/mode_status.h>
 
 namespace
 {
@@ -28,6 +30,7 @@ namespace
 
     rcl_publisher_t heartbeat_publisher;
     rcl_publisher_t response_publisher;
+
     rcl_publisher_t mode_status_publisher;
 
 
@@ -36,12 +39,14 @@ namespace
     // ========================================================
 
     rcl_subscription_t command_subscriber;
+
     rcl_subscription_t mode_request_subscriber;
+
     rcl_subscription_t host_heartbeat_subscriber;
 
 
     // ========================================================
-    // MESSAGE STORAGE
+    // STANDARD MESSAGE STORAGE
     // ========================================================
 
     std_msgs__msg__UInt32 heartbeat_msg;
@@ -49,18 +54,28 @@ namespace
     std_msgs__msg__UInt32 command_msg;
     std_msgs__msg__UInt32 host_heartbeat_msg;
 
-    std_msgs__msg__UInt8 mode_request_msg;
-    std_msgs__msg__UInt8 mode_status_msg;
+
+    // ========================================================
+    // TYRANT MESSAGE STORAGE
+    // ========================================================
+
+    tyrant_interfaces__msg__ModeRequest
+        mode_request_msg;
+
+    tyrant_interfaces__msg__ModeStatus
+        mode_status_msg;
 
 
     // ========================================================
-    // INTERNAL FLAGS
+    // INTERNAL DATA
     // ========================================================
 
     bool new_command = false;
     uint32_t last_command = 0;
 
     bool new_mode_request = false;
+
+    uint32_t requested_mode_id = 0;
     uint8_t requested_mode = 0;
 
     bool new_host_heartbeat = false;
@@ -73,34 +88,43 @@ namespace
 
     void commandCallback(const void *msgin)
     {
-        const auto *received_msg =
-            static_cast<const std_msgs__msg__UInt32 *>(
-                msgin
-            );
+        const auto *received =
+            static_cast<
+                const std_msgs__msg__UInt32 *
+            >(msgin);
 
-        last_command = received_msg->data;
+        last_command = received->data;
         new_command = true;
     }
 
+
     void modeRequestCallback(const void *msgin)
     {
-        const auto *received_msg =
-            static_cast<const std_msgs__msg__UInt8 *>(
-                msgin
-            );
+        const auto *received =
+            static_cast<
+                const tyrant_interfaces__msg__ModeRequest *
+            >(msgin);
 
-        requested_mode = received_msg->data;
+        requested_mode_id =
+            received->request_id;
+
+        requested_mode =
+            received->requested_mode;
+
         new_mode_request = true;
     }
 
+
     void hostHeartbeatCallback(const void *msgin)
     {
-        const auto *received_msg =
-            static_cast<const std_msgs__msg__UInt32 *>(
-                msgin
-            );
+        const auto *received =
+            static_cast<
+                const std_msgs__msg__UInt32 *
+            >(msgin);
 
-        host_heartbeat_value = received_msg->data;
+        host_heartbeat_value =
+            received->data;
+
         new_host_heartbeat = true;
     }
 }
@@ -114,14 +138,40 @@ namespace TyrantROS
 
         delay(2000);
 
-        set_microros_serial_transports(Serial);
+        set_microros_serial_transports(
+            Serial
+        );
 
-        allocator = rcl_get_default_allocator();
+        allocator =
+            rcl_get_default_allocator();
 
 
-        // ====================================================
-        // SUPPORT
-        // ====================================================
+        // ----------------------------------------------------
+        // Initialize custom message memory
+        // ----------------------------------------------------
+
+        if (
+            !tyrant_interfaces__msg__ModeRequest__init(
+                &mode_request_msg
+            )
+        )
+        {
+            return false;
+        }
+
+        if (
+            !tyrant_interfaces__msg__ModeStatus__init(
+                &mode_status_msg
+            )
+        )
+        {
+            return false;
+        }
+
+
+        // ----------------------------------------------------
+        // ROS support
+        // ----------------------------------------------------
 
         if (
             rclc_support_init(
@@ -136,9 +186,9 @@ namespace TyrantROS
         }
 
 
-        // ====================================================
-        // NODE
-        // ====================================================
+        // ----------------------------------------------------
+        // Node
+        // ----------------------------------------------------
 
         if (
             rclc_node_init_default(
@@ -153,9 +203,9 @@ namespace TyrantROS
         }
 
 
-        // ====================================================
-        // HEARTBEAT PUBLISHER
-        // ====================================================
+        // ----------------------------------------------------
+        // Heartbeat publisher
+        // ----------------------------------------------------
 
         if (
             rclc_publisher_init_default(
@@ -174,9 +224,9 @@ namespace TyrantROS
         }
 
 
-        // ====================================================
-        // TEST RESPONSE PUBLISHER
-        // ====================================================
+        // ----------------------------------------------------
+        // Legacy response publisher
+        // ----------------------------------------------------
 
         if (
             rclc_publisher_init_default(
@@ -195,18 +245,18 @@ namespace TyrantROS
         }
 
 
-        // ====================================================
-        // MODE STATUS PUBLISHER
-        // ====================================================
+        // ----------------------------------------------------
+        // Tyrant ModeStatus publisher
+        // ----------------------------------------------------
 
         if (
             rclc_publisher_init_default(
                 &mode_status_publisher,
                 &node,
                 ROSIDL_GET_MSG_TYPE_SUPPORT(
-                    std_msgs,
+                    tyrant_interfaces,
                     msg,
-                    UInt8
+                    ModeStatus
                 ),
                 "/tyrant/mode/status"
             ) != RCL_RET_OK
@@ -216,9 +266,9 @@ namespace TyrantROS
         }
 
 
-        // ====================================================
-        // TEST COMMAND SUBSCRIBER
-        // ====================================================
+        // ----------------------------------------------------
+        // Legacy test subscriber
+        // ----------------------------------------------------
 
         if (
             rclc_subscription_init_default(
@@ -237,18 +287,18 @@ namespace TyrantROS
         }
 
 
-        // ====================================================
-        // MODE REQUEST SUBSCRIBER
-        // ====================================================
+        // ----------------------------------------------------
+        // Tyrant ModeRequest subscriber
+        // ----------------------------------------------------
 
         if (
             rclc_subscription_init_default(
                 &mode_request_subscriber,
                 &node,
                 ROSIDL_GET_MSG_TYPE_SUPPORT(
-                    std_msgs,
+                    tyrant_interfaces,
                     msg,
-                    UInt8
+                    ModeRequest
                 ),
                 "/tyrant/mode/request"
             ) != RCL_RET_OK
@@ -258,9 +308,9 @@ namespace TyrantROS
         }
 
 
-        // ====================================================
-        // HOST HEARTBEAT SUBSCRIBER
-        // ====================================================
+        // ----------------------------------------------------
+        // Host heartbeat subscriber
+        // ----------------------------------------------------
 
         if (
             rclc_subscription_init_default(
@@ -279,15 +329,9 @@ namespace TyrantROS
         }
 
 
-        // ====================================================
-        // EXECUTOR
-        //
-        // Three subscriber handles:
-        //
-        // 1. test command
-        // 2. mode request
-        // 3. host heartbeat
-        // ====================================================
+        // ----------------------------------------------------
+        // Executor
+        // ----------------------------------------------------
 
         if (
             rclc_executor_init(
@@ -346,7 +390,6 @@ namespace TyrantROS
 
         heartbeat_msg.data = 0;
         response_msg.data = 0;
-        mode_status_msg.data = 0;
 
         return true;
     }
@@ -391,9 +434,41 @@ namespace TyrantROS
     }
 
 
-    void publishModeStatus(uint8_t mode)
+    void publishModeStatus(
+        uint32_t request_id,
+        uint8_t current_mode,
+        uint8_t requested_mode,
+        bool request_accepted,
+        uint8_t reason,
+        bool communication_healthy,
+        bool propulsion_allowed
+    )
     {
-        mode_status_msg.data = mode;
+        // Timestamp remains zero until
+        // micro-ROS time synchronization is implemented.
+        mode_status_msg.header.stamp.sec = 0;
+        mode_status_msg.header.stamp.nanosec = 0;
+
+        mode_status_msg.request_id =
+            request_id;
+
+        mode_status_msg.current_mode =
+            current_mode;
+
+        mode_status_msg.requested_mode =
+            requested_mode;
+
+        mode_status_msg.request_accepted =
+            request_accepted;
+
+        mode_status_msg.reason =
+            reason;
+
+        mode_status_msg.communication_healthy =
+            communication_healthy;
+
+        mode_status_msg.propulsion_allowed =
+            propulsion_allowed;
 
         const rcl_ret_t ret =
             rcl_publish(
@@ -415,22 +490,28 @@ namespace TyrantROS
     uint32_t getLastCommand()
     {
         new_command = false;
-
         return last_command;
     }
 
 
-    bool hasModeRequest()
+    bool takeModeRequest(
+        ModeRequestData &request
+    )
     {
-        return new_mode_request;
-    }
+        if (!new_mode_request)
+        {
+            return false;
+        }
 
+        request.request_id =
+            requested_mode_id;
 
-    uint8_t getRequestedMode()
-    {
+        request.requested_mode =
+            requested_mode;
+
         new_mode_request = false;
 
-        return requested_mode;
+        return true;
     }
 
 

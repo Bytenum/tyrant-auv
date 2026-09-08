@@ -4,20 +4,27 @@
 
 namespace TyrantSafety
 {
+    struct ModeRequestResult
+    {
+        bool accepted;
+        uint8_t reason;
+    };
+
     void init();
 
-    void update();
+    // Returns true when safety logic changes vehicle mode.
+    bool update();
 
     void notifyHostHeartbeat();
 
-    bool requestMode(uint8_t requested_mode);
+    ModeRequestResult requestMode(
+        uint8_t requested_mode
+    );
 
     uint8_t getMode();
 
     bool communicationHealthy();
-
     bool systemHealthy();
-
     bool autonomyReady();
 
     bool propulsionAllowed();

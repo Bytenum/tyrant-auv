@@ -19,15 +19,7 @@ namespace TyrantSafety
 
         TyrantVehicle::init();
 
-        // For current bring-up:
-        // Teensy initialization is considered successful.
-        //
-        // Later this will depend on:
-        // - sensors
-        // - power health
-        // - estimator
-        // - thruster interface
-        // - internal self-tests
+        // Bring-up initialization is currently considered OK.
         TyrantVehicle::completeBoot(true);
     }
 
@@ -47,63 +39,59 @@ namespace TyrantSafety
         const unsigned long now = millis();
 
         return (
-            now - last_host_heartbeat_ms
-            <= HOST_TIMEOUT_MS
+            now - last_host_heartbeat_ms <=
+            HOST_TIMEOUT_MS
         );
     }
 
     bool systemHealthy()
     {
-        // For current Phase 2B, communication health
-        // is our first real safety condition.
-        //
-        // More conditions will be added later.
-
+        // Current first real safety condition.
         return communicationHealthy();
     }
 
     bool autonomyReady()
     {
-        // AUTO is deliberately disabled for now.
-        //
-        // Later this will require:
-        // - estimator valid
-        // - reference valid
-        // - sensors healthy
-        // - controller healthy
-
+        // Deliberately false until sensors,
+        // estimator and reference validation exist.
         return false;
     }
 
-    bool requestMode(uint8_t requested_mode)
+    ModeRequestResult requestMode(
+        uint8_t requested_mode
+    )
     {
         if (requested_mode > 6)
         {
-            return false;
+            return {
+                false,
+                static_cast<uint8_t>(
+                    TyrantVehicle::Reason::INVALID_MODE
+                )
+            };
         }
 
-        const TyrantVehicle::Mode mode =
-            static_cast<TyrantVehicle::Mode>(
-                requested_mode
+        const auto result =
+            TyrantVehicle::requestMode(
+                static_cast<TyrantVehicle::Mode>(
+                    requested_mode
+                ),
+                systemHealthy(),
+                autonomyReady()
             );
 
-        return TyrantVehicle::requestMode(
-            mode,
-            systemHealthy(),
-            autonomyReady()
-        );
+        return {
+            result.accepted,
+            static_cast<uint8_t>(
+                result.reason
+            )
+        };
     }
 
-    void update()
+    bool update()
     {
-        const TyrantVehicle::Mode mode =
+        const auto mode =
             TyrantVehicle::getMode();
-
-        // Communication loss only forces SAFE
-        // when propulsion-capable modes are active.
-        //
-        // IDLE is allowed to remain IDLE while waiting
-        // for the host to connect.
 
         if (
             mode == TyrantVehicle::Mode::MANUAL ||
@@ -113,8 +101,12 @@ namespace TyrantSafety
             if (!communicationHealthy())
             {
                 TyrantVehicle::forceSafe();
+
+                return true;
             }
         }
+
+        return false;
     }
 
     uint8_t getMode()
@@ -126,13 +118,13 @@ namespace TyrantSafety
 
     bool propulsionAllowed()
     {
-        const TyrantVehicle::Mode mode =
-            TyrantVehicle::getMode();
-
         if (!systemHealthy())
         {
             return false;
         }
+
+        const auto mode =
+            TyrantVehicle::getMode();
 
         if (mode == TyrantVehicle::Mode::MANUAL)
         {
