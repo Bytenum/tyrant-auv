@@ -1,48 +1,36 @@
 #include <Arduino.h>
 
 #include "communication/ros_interface.h"
+#include "communication/connection_manager.h"
+
 #include "scheduler/scheduler.h"
 #include "safety/safety_manager.h"
-
-namespace
-{
-    uint32_t last_request_id = 0;
-
-    uint8_t last_requested_mode = 1;
-
-    bool last_request_accepted = false;
-
-    uint8_t last_reason = 0;
-}
 
 
 void setup()
 {
     // ========================================================
-    // SAFETY / VEHICLE STATE
+    // SAFETY
     // ========================================================
 
     TyrantSafety::init();
 
 
     // ========================================================
-    // MICRO-ROS
+    // SERIAL / MICRO-ROS TRANSPORT
+    //
+    // Only physical transport is configured here.
+    // ROS entities are NOT created here.
     // ========================================================
 
-    const bool ros_ok =
-        TyrantROS::init();
+    TyrantROS::setupTransport();
 
-    if (!ros_ok)
-    {
-        while (true)
-        {
-            // Fail-safe:
-            // operational firmware does not continue
-            // if ROS initialization failed.
 
-            delay(1000);
-        }
-    }
+    // ========================================================
+    // CONNECTION STATE MACHINE
+    // ========================================================
+
+    TyrantConnection::init();
 
 
     // ========================================================
@@ -56,72 +44,55 @@ void setup()
 void loop()
 {
     // ========================================================
-    // MICRO-ROS PROCESSING
+    // MICRO-ROS CONNECTION LIFECYCLE
+    //
+    // WAITING → CONNECTED → LOST → RECONNECT
     // ========================================================
 
-    TyrantROS::spin();
+    TyrantConnection::update();
 
 
     // ========================================================
-    // LEGACY COMMUNICATION TEST
+    // APPLICATION COMMUNICATION
     // ========================================================
 
-    if (TyrantROS::hasNewCommand())
+    if (TyrantConnection::connected())
     {
-        const uint32_t command =
-            TyrantROS::getLastCommand();
+        // Legacy bidirectional diagnostic.
+        if (TyrantROS::hasNewCommand())
+        {
+            const uint32_t command =
+                TyrantROS::getLastCommand();
 
-        TyrantROS::publishResponse(command);
-    }
-
-
-    // ========================================================
-    // HOST HEARTBEAT
-    // ========================================================
-
-    if (TyrantROS::hasNewHostHeartbeat())
-    {
-        (void)
-            TyrantROS::getHostHeartbeatValue();
-
-        TyrantSafety::notifyHostHeartbeat();
-    }
+            TyrantROS::publishResponse(command);
+        }
 
 
-    // ========================================================
-    // TYRANT MODE REQUEST
-    // ========================================================
+        // Host application heartbeat.
+        if (TyrantROS::hasNewHostHeartbeat())
+        {
+            (void)
+                TyrantROS::getHostHeartbeatValue();
 
-    TyrantROS::ModeRequestData request;
+            TyrantSafety::notifyHostHeartbeat();
+        }
 
-    if (TyrantROS::takeModeRequest(request))
-    {
-        last_request_id =
-            request.request_id;
 
-        last_requested_mode =
-            request.requested_mode;
+        // Vehicle mode request.
+        if (TyrantROS::hasModeRequest())
+        {
+            const uint8_t requested_mode =
+                TyrantROS::getRequestedMode();
 
-        const auto result =
-            TyrantSafety::requestMode(
-                request.requested_mode
+            (void)
+                TyrantSafety::requestMode(
+                    requested_mode
+                );
+
+            TyrantROS::publishModeStatus(
+                TyrantSafety::getMode()
             );
-
-        last_request_accepted =
-            result.accepted;
-
-        last_reason =
-            result.reason;
-
-        TyrantROS::publishModeStatus(
-            last_request_id,
-            TyrantSafety::getMode(),
-            last_requested_mode,
-            last_request_accepted,
-            last_reason,
-            TyrantSafety::communicationHealthy(),
-            TyrantSafety::propulsionAllowed()
-        );
+        }
     }
 
 
@@ -131,48 +102,35 @@ void loop()
 
     if (TyrantScheduler::heartbeatDue())
     {
-        TyrantROS::publishHeartbeat();
+        if (TyrantConnection::connected())
+        {
+            TyrantROS::publishHeartbeat();
+        }
     }
 
 
     // ========================================================
-    // SAFETY TASK
+    // SAFETY
+    //
+    // Runs even when ROS is disconnected.
+    // This is important.
     // ========================================================
 
     if (TyrantScheduler::safetyDue())
     {
-        const bool forced_safe =
-            TyrantSafety::update();
+        TyrantSafety::update();
 
-        if (forced_safe)
+        if (TyrantConnection::connected())
         {
-            // request_id = 0 means this mode change
-            // was generated internally by Teensy,
-            // not by a host request.
-
-            last_request_id = 0;
-
-            last_requested_mode = 4; // SAFE
-
-            last_request_accepted = false;
-
-            last_reason = 6; // COMMUNICATION_TIMEOUT
+            TyrantROS::publishModeStatus(
+                TyrantSafety::getMode()
+            );
         }
-
-        TyrantROS::publishModeStatus(
-            last_request_id,
-            TyrantSafety::getMode(),
-            last_requested_mode,
-            last_request_accepted,
-            last_reason,
-            TyrantSafety::communicationHealthy(),
-            TyrantSafety::propulsionAllowed()
-        );
     }
 
 
     // ========================================================
-    // FUTURE CONTROL TASK
+    // FUTURE CONTROL
     // ========================================================
 
     if (TyrantScheduler::controlDue())
@@ -182,13 +140,13 @@ void loop()
             // Future:
             //
             // Sensors
-            //    ↓
+            //     ↓
             // EKF
-            //    ↓
+            //     ↓
             // LMPC
-            //    ↓
+            //     ↓
             // TAM / QP
-            //    ↓
+            //     ↓
             // Thrusters
         }
     }
