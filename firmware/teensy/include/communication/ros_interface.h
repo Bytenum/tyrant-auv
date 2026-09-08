@@ -4,10 +4,19 @@
 
 namespace TyrantROS
 {
-    // Configure physical micro-ROS transport once.
+    struct ModeRequestData
+    {
+        uint32_t request_id;
+        uint8_t requested_mode;
+    };
+
+
+    // ========================================================
+    // CONNECTION LIFECYCLE
+    // ========================================================
+
     void setupTransport();
 
-    // Agent/session lifecycle.
     bool pingAgent(
         uint32_t timeout_ms,
         uint8_t attempts
@@ -19,28 +28,43 @@ namespace TyrantROS
 
     bool entitiesReady();
 
-    // Process incoming messages.
     void spin();
 
 
-    // --------------------------------------------------------
-    // Existing application API
-    // --------------------------------------------------------
+    // ========================================================
+    // APPLICATION COMMUNICATION
+    // ========================================================
 
     void publishHeartbeat();
 
-    void publishResponse(uint32_t value);
+    void publishResponse(
+        uint32_t value
+    );
 
-    void publishModeStatus(uint8_t mode);
+    void publishModeStatus(
+        uint32_t request_id,
+        uint8_t current_mode,
+        uint8_t requested_mode,
+        bool request_accepted,
+        uint8_t reason,
+        bool communication_healthy,
+        bool propulsion_allowed
+    );
 
+
+    // Legacy diagnostic
     bool hasNewCommand();
 
     uint32_t getLastCommand();
 
-    bool hasModeRequest();
 
-    uint8_t getRequestedMode();
+    // Production mode request
+    bool takeModeRequest(
+        ModeRequestData &request
+    );
 
+
+    // Host health
     bool hasNewHostHeartbeat();
 
     uint32_t getHostHeartbeatValue();

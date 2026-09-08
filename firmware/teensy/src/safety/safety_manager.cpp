@@ -6,10 +6,28 @@ namespace
     bool transport_connected = false;
 
     bool host_heartbeat_received = false;
-
     unsigned long last_host_heartbeat_ms = 0;
 
     constexpr unsigned long HOST_TIMEOUT_MS = 500;
+
+    bool internal_mode_event = false;
+
+    uint8_t internal_mode_reason =
+        static_cast<uint8_t>(
+            TyrantVehicle::Reason::NONE
+        );
+
+
+    void registerCommunicationTimeout()
+    {
+        internal_mode_event = true;
+
+        internal_mode_reason =
+            static_cast<uint8_t>(
+                TyrantVehicle::Reason::
+                    COMMUNICATION_TIMEOUT
+            );
+    }
 }
 
 
@@ -22,9 +40,16 @@ namespace TyrantSafety
         host_heartbeat_received = false;
         last_host_heartbeat_ms = 0;
 
+        internal_mode_event = false;
+
+        internal_mode_reason =
+            static_cast<uint8_t>(
+                TyrantVehicle::Reason::NONE
+            );
+
         TyrantVehicle::init();
 
-        // Current bring-up self-test is considered successful.
+        // Bring-up self test currently considered OK.
         TyrantVehicle::completeBoot(true);
     }
 
@@ -35,21 +60,20 @@ namespace TyrantSafety
 
         if (!connected)
         {
-            // Never allow an old heartbeat timestamp to become
-            // valid again after a reconnect.
             host_heartbeat_received = false;
             last_host_heartbeat_ms = 0;
 
             const TyrantVehicle::Mode mode =
                 TyrantVehicle::getMode();
 
-            // Immediate safety reaction to middleware loss.
             if (
                 mode == TyrantVehicle::Mode::MANUAL ||
                 mode == TyrantVehicle::Mode::AUTO
             )
             {
                 TyrantVehicle::forceSafe();
+
+                registerCommunicationTimeout();
             }
         }
     }
@@ -63,15 +87,15 @@ namespace TyrantSafety
 
     void notifyHostHeartbeat()
     {
-        // A heartbeat is only meaningful if the middleware
-        // connection currently exists.
         if (!transport_connected)
         {
             return;
         }
 
         host_heartbeat_received = true;
-        last_host_heartbeat_ms = millis();
+
+        last_host_heartbeat_ms =
+            millis();
     }
 
 
@@ -87,7 +111,8 @@ namespace TyrantSafety
             return false;
         }
 
-        const unsigned long now = millis();
+        const unsigned long now =
+            millis();
 
         return (
             now - last_host_heartbeat_ms
@@ -105,31 +130,48 @@ namespace TyrantSafety
     bool autonomyReady()
     {
         // Still deliberately disabled.
+        //
+        // Later:
+        // sensor health
+        // estimator valid
+        // reference valid
+        // controller health
+
         return false;
     }
 
 
-    bool requestMode(uint8_t requested_mode)
-{
-    if (requested_mode > 6)
+    ModeRequestResult requestMode(
+        uint8_t requested_mode
+    )
     {
-        return false;
+        if (requested_mode > 6)
+        {
+            return {
+                false,
+                static_cast<uint8_t>(
+                    TyrantVehicle::Reason::
+                        INVALID_MODE
+                )
+            };
+        }
+
+        const auto result =
+            TyrantVehicle::requestMode(
+                static_cast<
+                    TyrantVehicle::Mode
+                >(requested_mode),
+                systemHealthy(),
+                autonomyReady()
+            );
+
+        return {
+            result.accepted,
+            static_cast<uint8_t>(
+                result.reason
+            )
+        };
     }
-
-    const TyrantVehicle::Mode mode =
-        static_cast<TyrantVehicle::Mode>(
-            requested_mode
-        );
-
-    const auto result =
-        TyrantVehicle::requestMode(
-            mode,
-            systemHealthy(),
-            autonomyReady()
-        );
-
-    return result.accepted;
-}
 
 
     void update()
@@ -145,6 +187,8 @@ namespace TyrantSafety
             if (!communicationHealthy())
             {
                 TyrantVehicle::forceSafe();
+
+                registerCommunicationTimeout();
             }
         }
     }
@@ -168,7 +212,9 @@ namespace TyrantSafety
         const TyrantVehicle::Mode mode =
             TyrantVehicle::getMode();
 
-        if (mode == TyrantVehicle::Mode::MANUAL)
+        if (
+            mode == TyrantVehicle::Mode::MANUAL
+        )
         {
             return true;
         }
@@ -182,5 +228,22 @@ namespace TyrantSafety
         }
 
         return false;
+    }
+
+
+    bool takeInternalModeEvent(
+        uint8_t &reason
+    )
+    {
+        if (!internal_mode_event)
+        {
+            return false;
+        }
+
+        reason = internal_mode_reason;
+
+        internal_mode_event = false;
+
+        return true;
     }
 }

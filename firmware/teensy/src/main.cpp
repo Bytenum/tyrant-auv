@@ -7,27 +7,36 @@
 #include "safety/safety_manager.h"
 
 
+namespace
+{
+    uint32_t last_request_id = 0;
+
+    uint8_t last_requested_mode = 1; // IDLE
+
+    bool last_request_accepted = false;
+
+    uint8_t last_reason = 0; // NONE
+}
+
+
 void setup()
 {
     // ========================================================
-    // SAFETY
+    // SAFETY / VEHICLE STATE
     // ========================================================
 
     TyrantSafety::init();
 
 
     // ========================================================
-    // SERIAL / MICRO-ROS TRANSPORT
-    //
-    // Only physical transport is configured here.
-    // ROS entities are NOT created here.
+    // PHYSICAL MICRO-ROS TRANSPORT
     // ========================================================
 
     TyrantROS::setupTransport();
 
 
     // ========================================================
-    // CONNECTION STATE MACHINE
+    // CONNECTION MANAGER
     // ========================================================
 
     TyrantConnection::init();
@@ -44,9 +53,7 @@ void setup()
 void loop()
 {
     // ========================================================
-    // MICRO-ROS CONNECTION LIFECYCLE
-    //
-    // WAITING → CONNECTED → LOST → RECONNECT
+    // CONNECTION LIFECYCLE
     // ========================================================
 
     TyrantConnection::update();
@@ -58,39 +65,120 @@ void loop()
 
     if (TyrantConnection::connected())
     {
-        // Legacy bidirectional diagnostic.
+        // ----------------------------------------------------
+        // Legacy diagnostic command
+        // ----------------------------------------------------
+
         if (TyrantROS::hasNewCommand())
         {
             const uint32_t command =
                 TyrantROS::getLastCommand();
 
-            TyrantROS::publishResponse(command);
+            TyrantROS::publishResponse(
+                command
+            );
         }
 
 
-        // Host application heartbeat.
-        if (TyrantROS::hasNewHostHeartbeat())
+        // ----------------------------------------------------
+        // Host heartbeat
+        // ----------------------------------------------------
+
+        if (
+            TyrantROS::hasNewHostHeartbeat()
+        )
         {
             (void)
-                TyrantROS::getHostHeartbeatValue();
+                TyrantROS::
+                    getHostHeartbeatValue();
 
-            TyrantSafety::notifyHostHeartbeat();
+            TyrantSafety::
+                notifyHostHeartbeat();
         }
 
 
-        // Vehicle mode request.
-        if (TyrantROS::hasModeRequest())
-        {
-            const uint8_t requested_mode =
-                TyrantROS::getRequestedMode();
+        // ----------------------------------------------------
+        // CUSTOM MODE REQUEST
+        // ----------------------------------------------------
 
-            (void)
+        TyrantROS::ModeRequestData request;
+
+        if (
+            TyrantROS::takeModeRequest(
+                request
+            )
+        )
+        {
+            last_request_id =
+                request.request_id;
+
+            last_requested_mode =
+                request.requested_mode;
+
+
+            const auto result =
                 TyrantSafety::requestMode(
-                    requested_mode
+                    request.requested_mode
                 );
 
+
+            last_request_accepted =
+                result.accepted;
+
+            last_reason =
+                result.reason;
+
+
             TyrantROS::publishModeStatus(
-                TyrantSafety::getMode()
+                last_request_id,
+                TyrantSafety::getMode(),
+                last_requested_mode,
+                last_request_accepted,
+                last_reason,
+                TyrantSafety::
+                    communicationHealthy(),
+                TyrantSafety::
+                    propulsionAllowed()
+            );
+        }
+
+
+        // ----------------------------------------------------
+        // INTERNAL SAFETY EVENT
+        //
+        // Example:
+        // Agent loss or host heartbeat timeout.
+        // ----------------------------------------------------
+
+        uint8_t internal_reason = 0;
+
+        if (
+            TyrantSafety::
+                takeInternalModeEvent(
+                    internal_reason
+                )
+        )
+        {
+            last_request_id = 0;
+
+            last_requested_mode = 4; // SAFE
+
+            last_request_accepted = false;
+
+            last_reason =
+                internal_reason;
+
+
+            TyrantROS::publishModeStatus(
+                last_request_id,
+                TyrantSafety::getMode(),
+                last_requested_mode,
+                last_request_accepted,
+                last_reason,
+                TyrantSafety::
+                    communicationHealthy(),
+                TyrantSafety::
+                    propulsionAllowed()
             );
         }
     }
@@ -100,9 +188,13 @@ void loop()
     // TEENSY HEARTBEAT
     // ========================================================
 
-    if (TyrantScheduler::heartbeatDue())
+    if (
+        TyrantScheduler::heartbeatDue()
+    )
     {
-        if (TyrantConnection::connected())
+        if (
+            TyrantConnection::connected()
+        )
         {
             TyrantROS::publishHeartbeat();
         }
@@ -110,20 +202,53 @@ void loop()
 
 
     // ========================================================
-    // SAFETY
+    // SAFETY TASK
     //
-    // Runs even when ROS is disconnected.
-    // This is important.
+    // Must run even when ROS is disconnected.
     // ========================================================
 
-    if (TyrantScheduler::safetyDue())
+    if (
+        TyrantScheduler::safetyDue()
+    )
     {
         TyrantSafety::update();
 
-        if (TyrantConnection::connected())
+
+        if (
+            TyrantConnection::connected()
+        )
         {
+            // Catch a safety event generated by update().
+            uint8_t internal_reason = 0;
+
+            if (
+                TyrantSafety::
+                    takeInternalModeEvent(
+                        internal_reason
+                    )
+            )
+            {
+                last_request_id = 0;
+
+                last_requested_mode = 4;
+
+                last_request_accepted = false;
+
+                last_reason =
+                    internal_reason;
+            }
+
+
             TyrantROS::publishModeStatus(
-                TyrantSafety::getMode()
+                last_request_id,
+                TyrantSafety::getMode(),
+                last_requested_mode,
+                last_request_accepted,
+                last_reason,
+                TyrantSafety::
+                    communicationHealthy(),
+                TyrantSafety::
+                    propulsionAllowed()
             );
         }
     }
@@ -133,20 +258,25 @@ void loop()
     // FUTURE CONTROL
     // ========================================================
 
-    if (TyrantScheduler::controlDue())
+    if (
+        TyrantScheduler::controlDue()
+    )
     {
-        if (TyrantSafety::propulsionAllowed())
+        if (
+            TyrantSafety::
+                propulsionAllowed()
+        )
         {
             // Future:
             //
             // Sensors
-            //     ↓
+            //    ↓
             // EKF
-            //     ↓
+            //    ↓
             // LMPC
-            //     ↓
-            // TAM / QP
-            //     ↓
+            //    ↓
+            // TAM/QP
+            //    ↓
             // Thrusters
         }
     }

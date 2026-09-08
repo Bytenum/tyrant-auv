@@ -4,6 +4,12 @@
 
 namespace TyrantSafety
 {
+    struct ModeRequestResult
+    {
+        bool accepted;
+        uint8_t reason;
+    };
+
     void init();
 
     void update();
@@ -12,7 +18,9 @@ namespace TyrantSafety
 
     void notifyHostHeartbeat();
 
-    bool requestMode(uint8_t requested_mode);
+    ModeRequestResult requestMode(
+        uint8_t requested_mode
+    );
 
     uint8_t getMode();
 
@@ -25,4 +33,10 @@ namespace TyrantSafety
     bool autonomyReady();
 
     bool propulsionAllowed();
+
+    // Internal mode changes such as:
+    // communication loss -> SAFE
+    bool takeInternalModeEvent(
+        uint8_t &reason
+    );
 }
