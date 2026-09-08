@@ -1,1 +1,0 @@
-/workspaces/tyrant-auv/ros2_ws/src/build/tyrant_interfaces/rosidl_typesupport_introspection_c/tyrant_interfaces/msg/rosidl_typesupport_introspection_c__visibility_control.h

@@ -1,1 +1,0 @@
-/workspaces/tyrant-auv/ros2_ws/src/build/tyrant_interfaces/rosidl_generator_cpp/tyrant_interfaces/msg/detail/vehicle_state__builder.hpp

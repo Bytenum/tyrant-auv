@@ -1,1 +1,0 @@
-/workspaces/tyrant-auv/ros2_ws/src/build/tyrant_interfaces/rosidl_generator_rs/tyrant_interfaces/rust/src/lib.rs

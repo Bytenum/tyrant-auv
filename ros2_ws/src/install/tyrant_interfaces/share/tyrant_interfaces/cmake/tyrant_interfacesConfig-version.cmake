@@ -1,1 +1,0 @@
-/workspaces/tyrant-auv/ros2_ws/src/build/tyrant_interfaces/ament_cmake_core/tyrant_interfacesConfig-version.cmake

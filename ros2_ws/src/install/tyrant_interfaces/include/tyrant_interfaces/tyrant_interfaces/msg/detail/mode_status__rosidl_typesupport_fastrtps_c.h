@@ -1,1 +1,0 @@
-/workspaces/tyrant-auv/ros2_ws/src/build/tyrant_interfaces/rosidl_typesupport_fastrtps_c/tyrant_interfaces/msg/detail/mode_status__rosidl_typesupport_fastrtps_c.h
