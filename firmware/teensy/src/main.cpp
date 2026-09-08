@@ -1,70 +1,155 @@
 #include <Arduino.h>
-#include <micro_ros_platformio.h>
 
-#include <rcl/rcl.h>
-#include <rclc/rclc.h>
-
-#include <std_msgs/msg/u_int32.h>
-
-rcl_publisher_t publisher;
-rcl_node_t node;
-rclc_support_t support;
-rcl_allocator_t allocator;
-
-std_msgs__msg__UInt32 heartbeat_msg;
-
-unsigned long last_publish_ms = 0;
+#include "communication/ros_interface.h"
+#include "scheduler/scheduler.h"
+#include "safety/safety_manager.h"
 
 void setup()
 {
-    Serial.begin(115200);
+    // ========================================================
+    // SAFETY / VEHICLE STATE
+    // ========================================================
 
-    delay(2000);
+    TyrantSafety::init();
 
-    set_microros_serial_transports(Serial);
 
-    allocator = rcl_get_default_allocator();
+    // ========================================================
+    // MICRO-ROS
+    // ========================================================
 
-    rclc_support_init(
-        &support,
-        0,
-        nullptr,
-        &allocator
-    );
+    const bool ros_ok =
+        TyrantROS::init();
 
-    rclc_node_init_default(
-        &node,
-        "tyrant_teensy",
-        "",
-        &support
-    );
+    if (!ros_ok)
+    {
+        // Fail-safe:
+        // firmware does not continue into operational logic
+        // when ROS initialization fails.
 
-    rclc_publisher_init_default(
-        &publisher,
-        &node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt32),
-        "/tyrant/heartbeat"
-    );
+        while (true)
+        {
+            delay(1000);
+        }
+    }
 
-    heartbeat_msg.data = 0;
+
+    // ========================================================
+    // SCHEDULER
+    // ========================================================
+
+    TyrantScheduler::init();
 }
+
 
 void loop()
 {
-    const unsigned long now = millis();
+    // ========================================================
+    // PROCESS MICRO-ROS
+    // ========================================================
 
-    if (now - last_publish_ms >= 1000)
+    TyrantROS::spin();
+
+
+    // ========================================================
+    // LEGACY BIDIRECTIONAL TEST
+    // ========================================================
+
+    if (TyrantROS::hasNewCommand())
     {
-        heartbeat_msg.data++;
+        const uint32_t command =
+            TyrantROS::getLastCommand();
 
-        rcl_publish(
-            &publisher,
-            &heartbeat_msg,
-            nullptr
-        );
-
-        last_publish_ms = now;
+        TyrantROS::publishResponse(command);
     }
 
-    delay(10);
+
+    // ========================================================
+    // HOST HEARTBEAT
+    // ========================================================
+
+    if (TyrantROS::hasNewHostHeartbeat())
+    {
+        // Read and clear the communication flag.
+        //
+        // The numerical heartbeat value is not currently
+        // important. Arrival time is what matters.
+
+        (void)TyrantROS::getHostHeartbeatValue();
+
+        TyrantSafety::notifyHostHeartbeat();
+    }
+
+
+    // ========================================================
+    // MODE REQUEST
+    // ========================================================
+
+    if (TyrantROS::hasModeRequest())
+    {
+        const uint8_t requested_mode =
+            TyrantROS::getRequestedMode();
+
+        TyrantSafety::requestMode(
+            requested_mode
+        );
+
+        // Publish actual mode, regardless of whether request
+        // was accepted or rejected.
+        //
+        // Therefore ROS always sees what Teensy actually chose.
+
+        TyrantROS::publishModeStatus(
+            TyrantSafety::getMode()
+        );
+    }
+
+
+    // ========================================================
+    // TEENSY HEARTBEAT — 1 Hz
+    // ========================================================
+
+    if (TyrantScheduler::heartbeatDue())
+    {
+        TyrantROS::publishHeartbeat();
+    }
+
+
+    // ========================================================
+    // SAFETY TASK — 10 Hz
+    // ========================================================
+
+    if (TyrantScheduler::safetyDue())
+    {
+        TyrantSafety::update();
+
+        TyrantROS::publishModeStatus(
+            TyrantSafety::getMode()
+        );
+    }
+
+
+    // ========================================================
+    // CONTROL TASK — currently placeholder
+    // ========================================================
+
+    if (TyrantScheduler::controlDue())
+    {
+        if (TyrantSafety::propulsionAllowed())
+        {
+            // Future pipeline:
+            //
+            // Sensors
+            //    ↓
+            // EKF
+            //    ↓
+            // LMPC
+            //    ↓
+            // TAM / QP
+            //    ↓
+            // Thrusters
+        }
+    }
+
+
+    delay(1);
 }
