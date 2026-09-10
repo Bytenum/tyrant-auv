@@ -185,19 +185,40 @@ void loop()
 
 
     // ========================================================
-    // TEENSY HEARTBEAT
+    // TEENSY HEARTBEAT + diagnostic
     // ========================================================
 
     if (
         TyrantScheduler::heartbeatDue()
     )
     {
-        if (
-            TyrantConnection::connected()
-        )
-        {
-            TyrantROS::publishHeartbeat();
-        }
+if (
+        TyrantConnection::connected()
+    )
+    {
+        TyrantROS::publishHeartbeat();
+
+
+        const auto connection_stats =
+            TyrantConnection::getStats();
+
+        const auto error_stats =
+            TyrantROS::getErrorStats();
+
+
+        TyrantROS::publishCommunicationDiagnostics(
+            static_cast<uint8_t>(
+                TyrantConnection::getState()
+            ),
+            connection_stats.connection_count,
+            connection_stats.disconnect_count,
+            connection_stats.reconnect_count,
+            error_stats.publish_failures,
+            error_stats.executor_failures,
+            error_stats.entity_create_failures,
+            error_stats.entity_destroy_failures
+        );
+    }
     }
     // ========================================================
     // SYSTEM HEALTH TELEMETRY — 5 Hz

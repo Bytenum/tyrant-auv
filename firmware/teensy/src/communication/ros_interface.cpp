@@ -13,6 +13,7 @@
 #include <tyrant_interfaces/msg/mode_request.h>
 #include <tyrant_interfaces/msg/mode_status.h>
 #include <tyrant_interfaces/msg/system_health.h>
+#include <tyrant_interfaces/msg/communication_diagnostics.h>
 
 
 // ============================================================
@@ -56,6 +57,9 @@ namespace
 
     rcl_publisher_t system_health_publisher =
         rcl_get_zero_initialized_publisher();
+    
+    rcl_publisher_t communication_diagnostics_publisher =
+        rcl_get_zero_initialized_publisher();
 
 
     // ========================================================
@@ -87,18 +91,14 @@ namespace
 
 
     bool heartbeat_pub_initialized = false;
-
     bool response_pub_initialized = false;
-
     bool mode_status_pub_initialized = false;
-
     bool system_health_pub_initialized = false;
+    bool communication_diagnostics_pub_initialized = false;
 
 
     bool command_sub_initialized = false;
-
     bool mode_request_sub_initialized = false;
-
     bool host_heartbeat_sub_initialized = false;
 
 
@@ -106,11 +106,11 @@ namespace
 
 
     bool mode_request_msg_initialized = false;
-
     bool mode_status_msg_initialized = false;
-
     bool system_health_msg_initialized = false;
+    bool communication_diagnostics_msg_initialized = false;
 
+    
 
     bool entities_ready = false;
 
@@ -143,26 +143,30 @@ namespace
     tyrant_interfaces__msg__SystemHealth
         system_health_msg;
 
+    tyrant_interfaces__msg__CommunicationDiagnostics
+        communication_diagnostics_msg;
+
 
     // ========================================================
     // APPLICATION DATA / FLAGS
     // ========================================================
 
     bool new_command = false;
-
     uint32_t last_command = 0;
 
 
     bool new_mode_request = false;
-
     uint32_t requested_mode_id = 0;
-
     uint8_t requested_mode = 0;
 
 
     bool new_host_heartbeat = false;
-
     uint32_t host_heartbeat_value = 0;
+
+    uint32_t publish_failures = 0;
+    uint32_t executor_failures = 0;
+    uint32_t entity_create_failures = 0;
+    uint32_t entity_destroy_failures = 0;
 
 
     // ========================================================
@@ -177,6 +181,47 @@ namespace
         (void)ret;
     }
 
+    void recordPublishResult(rcl_ret_t ret)
+    {
+        if (ret != RCL_RET_OK)
+        {
+            publish_failures++;
+        }
+    }
+
+
+    void recordExecutorResult(rcl_ret_t ret)
+    {
+        if (
+            ret != RCL_RET_OK &&
+            ret != RCL_RET_TIMEOUT
+        )
+        {
+            executor_failures++;
+        }
+    }
+
+
+    bool recordCreateResult(rcl_ret_t ret)
+    {
+        if (ret == RCL_RET_OK)
+        {
+            return true;
+        }
+
+        entity_create_failures++;
+
+        return false;
+    }
+
+
+    void recordDestroyResult(rcl_ret_t ret)
+    {
+        if (ret != RCL_RET_OK)
+        {
+            entity_destroy_failures++;
+        }
+    }
 
     // ========================================================
     // CALLBACK: LEGACY TEST COMMAND
@@ -388,25 +433,38 @@ namespace TyrantROS
 
             return false;
         }
-
-
         system_health_msg_initialized =
             true;
 
 
+        if (
+            !tyrant_interfaces__msg__CommunicationDiagnostics__init(
+                &communication_diagnostics_msg
+            )
+        )
+        {
+            entity_create_failures++;
+
+            destroyEntities();
+
+            return false;
+        }
+
+        communication_diagnostics_msg_initialized = true;
         // ====================================================
         // RCLC SUPPORT
         // ====================================================
 
         if (
-            rclc_support_init(
-                &support,
-                0,
-                nullptr,
-                &allocator
+            !recordCreateResult(
+                rclc_support_init(
+                    &support,
+                    0,
+                    nullptr,
+                    &allocator
+                )
             )
-            !=
-            RCL_RET_OK
+            
         )
         {
             destroyEntities();
@@ -424,14 +482,16 @@ namespace TyrantROS
         // ====================================================
 
         if (
-            rclc_node_init_default(
-                &node,
-                "tyrant_teensy",
-                "",
-                &support
+            !recordCreateResult(
+                rclc_node_init_default(
+                    &node,
+                    "tyrant_teensy",
+                    "",
+                    &support
+                )
             )
-            !=
-            RCL_RET_OK
+            
+            
         )
         {
             destroyEntities();
@@ -453,18 +513,20 @@ namespace TyrantROS
         // ====================================================
 
         if (
-            rclc_publisher_init_default(
-                &heartbeat_publisher,
-                &node,
-                ROSIDL_GET_MSG_TYPE_SUPPORT(
+            
+            !recordCreateResult(
+                rclc_publisher_init_default(
+                    &heartbeat_publisher,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
                     std_msgs,
                     msg,
                     UInt32
                 ),
                 "/tyrant/heartbeat"
+                )
             )
-            !=
-            RCL_RET_OK
+            
         )
         {
             destroyEntities();
@@ -485,18 +547,19 @@ namespace TyrantROS
         // ====================================================
 
         if (
-            rclc_publisher_init_default(
-                &response_publisher,
-                &node,
-                ROSIDL_GET_MSG_TYPE_SUPPORT(
-                    std_msgs,
-                    msg,
-                    UInt32
+            !recordCreateResult(
+                rclc_publisher_init_default(
+                    &response_publisher,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
+                        std_msgs,
+                        msg,
+                        UInt32
                 ),
                 "/tyrant/test_response"
             )
-            !=
-            RCL_RET_OK
+            )
+           
         )
         {
             destroyEntities();
@@ -517,18 +580,18 @@ namespace TyrantROS
         // ====================================================
 
         if (
-            rclc_publisher_init_default(
-                &mode_status_publisher,
-                &node,
-                ROSIDL_GET_MSG_TYPE_SUPPORT(
-                    tyrant_interfaces,
-                    msg,
-                    ModeStatus
-                ),
-                "/tyrant/mode/status"
+            !recordCreateResult(
+                rclc_publisher_init_default(
+                    &mode_status_publisher,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
+                        tyrant_interfaces,
+                        msg,
+                        ModeStatus
+                    ),
+                    "/tyrant/mode/status"
+                )
             )
-            !=
-            RCL_RET_OK
         )
         {
             destroyEntities();
@@ -549,18 +612,19 @@ namespace TyrantROS
         // ====================================================
 
         if (
-            rclc_publisher_init_default(
-                &system_health_publisher,
-                &node,
-                ROSIDL_GET_MSG_TYPE_SUPPORT(
-                    tyrant_interfaces,
-                    msg,
-                    SystemHealth
-                ),
-                "/tyrant/system/health"
+            !recordCreateResult(
+                rclc_publisher_init_default(
+                    &system_health_publisher,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
+                        tyrant_interfaces,
+                        msg,
+                        SystemHealth
+                    ),
+                    "/tyrant/system/health"
+                )
             )
-            !=
-            RCL_RET_OK
+            
         )
         {
             destroyEntities();
@@ -571,7 +635,34 @@ namespace TyrantROS
 
         system_health_pub_initialized =
             true;
+        // ====================================================
+        // PUBLISHER:
+        // /tyrant/communication/diagnostics
+        //
+        // Custom Tyrant communication diagnostics.
+        // ====================================================
 
+        if (
+            !recordCreateResult(
+                rclc_publisher_init_default(
+                    &communication_diagnostics_publisher,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
+                        tyrant_interfaces,
+                        msg,
+                        CommunicationDiagnostics
+                    ),
+                    "/tyrant/communication/diagnostics"
+                )
+            )
+        )
+        {
+            destroyEntities();
+
+            return false;
+        }
+
+        communication_diagnostics_pub_initialized = true;
 
         // ====================================================
         // SUBSCRIBER:
@@ -581,18 +672,18 @@ namespace TyrantROS
         // ====================================================
 
         if (
-            rclc_subscription_init_default(
-                &command_subscriber,
-                &node,
-                ROSIDL_GET_MSG_TYPE_SUPPORT(
-                    std_msgs,
-                    msg,
+            !recordCreateResult(
+                rclc_subscription_init_default(
+                    &command_subscriber,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
+                        std_msgs,
+                        msg,
                     UInt32
                 ),
                 "/tyrant/test_command"
             )
-            !=
-            RCL_RET_OK
+            )
         )
         {
             destroyEntities();
@@ -613,18 +704,19 @@ namespace TyrantROS
         // ====================================================
 
         if (
-            rclc_subscription_init_default(
-                &mode_request_subscriber,
-                &node,
-                ROSIDL_GET_MSG_TYPE_SUPPORT(
-                    tyrant_interfaces,
-                    msg,
-                    ModeRequest
-                ),
-                "/tyrant/mode/request"
+            !recordCreateResult(
+                rclc_subscription_init_default(
+                    &mode_request_subscriber,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
+                        tyrant_interfaces,
+                        msg,
+                        ModeRequest
+                    ),
+                    "/tyrant/mode/request"
+                )
             )
-            !=
-            RCL_RET_OK
+            
         )
         {
             destroyEntities();
@@ -643,18 +735,19 @@ namespace TyrantROS
         // ====================================================
 
         if (
-            rclc_subscription_init_default(
-                &host_heartbeat_subscriber,
-                &node,
-                ROSIDL_GET_MSG_TYPE_SUPPORT(
-                    std_msgs,
-                    msg,
-                    UInt32
-                ),
-                "/tyrant/host_heartbeat"
+            !recordCreateResult(
+                rclc_subscription_init_default(
+                    &host_heartbeat_subscriber,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
+                        std_msgs,
+                        msg,
+                        UInt32
+                    ),
+                    "/tyrant/host_heartbeat"
+                )
             )
-            !=
-            RCL_RET_OK
+            
         )
         {
             destroyEntities();
@@ -686,14 +779,13 @@ namespace TyrantROS
 
 
         if (
-            rclc_executor_init(
+            !recordCreateResult(rclc_executor_init(
                 &executor,
                 &support.context,
                 3,
                 &allocator
             )
-            !=
-            RCL_RET_OK
+            )
         )
         {
             destroyEntities();
@@ -711,15 +803,15 @@ namespace TyrantROS
         // ====================================================
 
         if (
-            rclc_executor_add_subscription(
-                &executor,
-                &command_subscriber,
-                &command_msg,
-                &commandCallback,
-                ON_NEW_DATA
+            !recordCreateResult(
+                rclc_executor_add_subscription(
+                    &executor,
+                    &command_subscriber,
+                    &command_msg,
+                    &commandCallback,
+                    ON_NEW_DATA
             )
-            !=
-            RCL_RET_OK
+            )
         )
         {
             destroyEntities();
@@ -733,15 +825,15 @@ namespace TyrantROS
         // ====================================================
 
         if (
-            rclc_executor_add_subscription(
-                &executor,
-                &mode_request_subscriber,
-                &mode_request_msg,
-                &modeRequestCallback,
-                ON_NEW_DATA
+            !recordCreateResult(
+                rclc_executor_add_subscription(
+                    &executor,
+                    &mode_request_subscriber,
+                    &mode_request_msg,
+                    &modeRequestCallback,
+                    ON_NEW_DATA
+                )
             )
-            !=
-            RCL_RET_OK
         )
         {
             destroyEntities();
@@ -755,15 +847,15 @@ namespace TyrantROS
         // ====================================================
 
         if (
-            rclc_executor_add_subscription(
-                &executor,
-                &host_heartbeat_subscriber,
-                &host_heartbeat_msg,
-                &hostHeartbeatCallback,
-                ON_NEW_DATA
+            !recordCreateResult(
+                rclc_executor_add_subscription(
+                    &executor,
+                    &host_heartbeat_subscriber,
+                    &host_heartbeat_msg,
+                    &hostHeartbeatCallback,
+                    ON_NEW_DATA
+                )
             )
-            !=
-            RCL_RET_OK
         )
         {
             destroyEntities();
@@ -792,6 +884,8 @@ namespace TyrantROS
 
 
         return true;
+
+
     }
 
 
@@ -1000,6 +1094,22 @@ namespace TyrantROS
             system_health_publisher =
                 rcl_get_zero_initialized_publisher();
         }
+        
+        if (communication_diagnostics_pub_initialized)
+        {
+            recordDestroyResult(
+                rcl_publisher_fini(
+                    &communication_diagnostics_publisher,
+                    &node
+                )
+            );
+
+            communication_diagnostics_pub_initialized =
+                false;
+
+            communication_diagnostics_publisher =
+                rcl_get_zero_initialized_publisher();
+        }
 
 
         // ====================================================
@@ -1046,7 +1156,7 @@ namespace TyrantROS
 
 
         // ====================================================
-        // CUSTOM MESSAGE MEMORY CLEANUP
+        // CUSTOM MESSAGE MEMORY CLEANUP 
         // ====================================================
 
         if (system_health_msg_initialized)
@@ -1083,6 +1193,18 @@ namespace TyrantROS
             mode_request_msg_initialized =
                 false;
         }
+
+        if (communication_diagnostics_msg_initialized)
+        {
+            tyrant_interfaces__msg__CommunicationDiagnostics__fini(
+                &communication_diagnostics_msg
+            );
+
+            communication_diagnostics_msg_initialized =
+                false;
+        }
+
+
     }
 
 
@@ -1115,7 +1237,7 @@ namespace TyrantROS
             );
 
 
-        (void)ret;
+        recordExecutorResult(ret);
     }
 
 
@@ -1142,7 +1264,7 @@ namespace TyrantROS
             );
 
 
-        (void)ret;
+        recordPublishResult(ret);
     }
 
 
@@ -1172,7 +1294,7 @@ namespace TyrantROS
             );
 
 
-        (void)ret;
+        recordPublishResult(ret);
     }
 
 
@@ -1270,7 +1392,7 @@ namespace TyrantROS
             );
 
 
-        (void)ret;
+        recordPublishResult(ret);
     }
 
 
@@ -1320,10 +1442,78 @@ namespace TyrantROS
             );
 
 
-        (void)ret;
+        recordPublishResult(ret);
+    }
+    // ========================================================
+    // PUBLISH Communication Diagnostics
+    // ========================================================
+    void publishCommunicationDiagnostics(
+        uint8_t connection_state,
+        uint32_t connection_count,
+        uint32_t disconnect_count,
+        uint32_t reconnect_count,
+        uint32_t publish_failure_count,
+        uint32_t executor_failure_count,
+        uint32_t entity_create_failure_count,
+        uint32_t entity_destroy_failure_count
+    )
+    {
+        if (!entities_ready)
+        {
+            return;
+        }
+
+        communication_diagnostics_msg.connection_state =
+            connection_state;
+
+        communication_diagnostics_msg.connection_count =
+            connection_count;
+
+        communication_diagnostics_msg.disconnect_count =
+            disconnect_count;
+
+        communication_diagnostics_msg.reconnect_count =
+            reconnect_count;
+
+        communication_diagnostics_msg.publish_failures =
+            publish_failure_count;
+
+        communication_diagnostics_msg.executor_failures =
+            executor_failure_count;
+
+        communication_diagnostics_msg.entity_create_failures =
+            entity_create_failure_count;
+
+        communication_diagnostics_msg.entity_destroy_failures =
+            entity_destroy_failure_count;
+
+
+        const rcl_ret_t ret =
+            rcl_publish(
+                &communication_diagnostics_publisher,
+                &communication_diagnostics_msg,
+                nullptr
+            );
+
+        recordPublishResult(ret);
     }
 
+    //==================================//Implementation//===============================================//
 
+    // ========================================================
+    // COMMUNICATION ERROR STATISTICS
+    // ========================================================
+
+    ErrorStats getErrorStats()
+    {
+        return {
+            publish_failures,
+            executor_failures,
+            entity_create_failures,
+            entity_destroy_failures
+        };
+    }
+ 
     // ========================================================
     // LEGACY TEST COMMAND
     // ========================================================

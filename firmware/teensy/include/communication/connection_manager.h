@@ -12,6 +12,15 @@ namespace TyrantConnection
         DISCONNECTED
     };
 
+
+    struct Stats
+    {
+        uint32_t connection_count;
+        uint32_t disconnect_count;
+        uint32_t reconnect_count;
+    };
+
+
     void init();
 
     void update();
@@ -19,4 +28,6 @@ namespace TyrantConnection
     bool connected();
 
     State getState();
+
+    Stats getStats();
 }

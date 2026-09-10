@@ -10,9 +10,10 @@ namespace
 
     unsigned long last_waiting_ping_ms = 0;
     unsigned long last_connected_ping_ms = 0;
+    uint32_t connection_count = 0;
+    uint32_t disconnect_count = 0;
+    uint32_t reconnect_count = 0;
 
-    // Bring-up values.
-    // We will measure/tune these before real control loops.
     constexpr unsigned long WAITING_PING_PERIOD_MS = 500;
     constexpr unsigned long CONNECTED_PING_PERIOD_MS = 500;
 
@@ -28,6 +29,9 @@ namespace TyrantConnection
 
         last_waiting_ping_ms = 0;
         last_connected_ping_ms = 0;
+        connection_count = 0;
+        disconnect_count = 0;
+        reconnect_count = 0;
 
         TyrantSafety::setTransportConnected(false);
     }
@@ -78,6 +82,13 @@ namespace TyrantConnection
             {
                 if (TyrantROS::createEntities())
                 {
+                    connection_count++;
+
+                    if (connection_count > 1)
+                    {
+                        reconnect_count++;
+                    }
+
                     TyrantSafety::setTransportConnected(true);
 
                     last_connected_ping_ms = millis();
@@ -121,6 +132,7 @@ namespace TyrantConnection
                         )
                     )
                     {
+                        disconnect_count++;
                         // Safety is informed immediately.
                         TyrantSafety::setTransportConnected(false);
 
@@ -171,9 +183,18 @@ namespace TyrantConnection
             State::CONNECTED;
     }
 
-
     State getState()
-    {
-        return current_state;
-    }
+        {
+            return current_state;
+        }
+
+
+        Stats getStats()
+        {
+            return {
+                connection_count,
+                disconnect_count,
+                reconnect_count
+            };
+        }
 }
