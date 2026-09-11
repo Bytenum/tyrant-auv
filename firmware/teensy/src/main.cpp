@@ -6,6 +6,7 @@
 #include "scheduler/scheduler.h"
 #include "safety/safety_manager.h"
 
+#include "sensors/sensor_manager.h"
 
 namespace
 {
