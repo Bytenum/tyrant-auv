@@ -68,7 +68,7 @@ void loop()
         // ----------------------------------------------------
         // Legacy diagnostic command
         // ----------------------------------------------------
-
+        #ifdef TYRANT_ENABLE_DIAGNOSTICS
         if (TyrantROS::hasNewCommand())
         {
             const uint32_t command =
@@ -78,7 +78,7 @@ void loop()
                 command
             );
         }
-
+        #endif
 
         // ----------------------------------------------------
         // Host heartbeat

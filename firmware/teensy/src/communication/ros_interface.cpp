@@ -47,8 +47,10 @@ namespace
         rcl_get_zero_initialized_publisher();
 
 
+    #ifdef TYRANT_ENABLE_DIAGNOSTICS
     rcl_publisher_t response_publisher =
         rcl_get_zero_initialized_publisher();
+    #endif
 
 
     rcl_publisher_t mode_status_publisher =
@@ -66,9 +68,10 @@ namespace
     // SUBSCRIBERS
     // ========================================================
 
+    #ifdef TYRANT_ENABLE_DIAGNOSTICS
     rcl_subscription_t command_subscriber =
         rcl_get_zero_initialized_subscription();
-
+    #endif
 
     rcl_subscription_t mode_request_subscriber =
         rcl_get_zero_initialized_subscription();
@@ -77,6 +80,19 @@ namespace
     rcl_subscription_t host_heartbeat_subscriber =
         rcl_get_zero_initialized_subscription();
 
+    // ========================================================
+    // EXECUTOR CONFIGURATION
+    // ========================================================
+
+    // ========================================================
+    // EXECUTOR CONFIGURATION
+    // ========================================================
+
+    #ifdef TYRANT_ENABLE_DIAGNOSTICS
+        constexpr size_t EXECUTOR_HANDLE_COUNT = 3;
+    #else
+        constexpr size_t EXECUTOR_HANDLE_COUNT = 2;
+    #endif
 
     // ========================================================
     // ENTITY INITIALIZATION FLAGS
@@ -91,13 +107,12 @@ namespace
 
 
     bool heartbeat_pub_initialized = false;
-    bool response_pub_initialized = false;
-    bool mode_status_pub_initialized = false;
+        bool mode_status_pub_initialized = false;
     bool system_health_pub_initialized = false;
     bool communication_diagnostics_pub_initialized = false;
 
 
-    bool command_sub_initialized = false;
+    
     bool mode_request_sub_initialized = false;
     bool host_heartbeat_sub_initialized = false;
 
@@ -114,19 +129,33 @@ namespace
 
     bool entities_ready = false;
 
+    // ========================================================
+    // diagnostic only flags
+    // ========================================================
+    #ifdef TYRANT_ENABLE_DIAGNOSTICS
+    bool response_pub_initialized = false;
+    bool command_sub_initialized = false;
+    #endif
+    // ========================================================
+    // end of diagnostic only flags
+    // ========================================================
 
     // ========================================================
     // STANDARD ROS MESSAGE STORAGE
     // ========================================================
 
     std_msgs__msg__UInt32 heartbeat_msg;
-
-    std_msgs__msg__UInt32 response_msg;
-
-    std_msgs__msg__UInt32 command_msg;
-
     std_msgs__msg__UInt32 host_heartbeat_msg;
-
+    // ========================================================
+    // diagnostic only msg storage
+    // ========================================================
+    #ifdef TYRANT_ENABLE_DIAGNOSTICS
+    std_msgs__msg__UInt32 response_msg;
+    std_msgs__msg__UInt32 command_msg;
+    #endif
+    // ========================================================
+    // end of diagnostic only msg storage
+    // ========================================================
 
     // ========================================================
     // TYRANT CUSTOM MESSAGE STORAGE
@@ -151,8 +180,10 @@ namespace
     // APPLICATION DATA / FLAGS
     // ========================================================
 
+   #ifdef TYRANT_ENABLE_DIAGNOSTICS
     bool new_command = false;
     uint32_t last_command = 0;
+    #endif
 
 
     bool new_mode_request = false;
@@ -224,9 +255,10 @@ namespace
     }
 
     // ========================================================
-    // CALLBACK: LEGACY TEST COMMAND
+    // CALLBACK: LEGACY TEST COMMAND (diagnostic only)
     // ========================================================
 
+    #ifdef TYRANT_ENABLE_DIAGNOSTICS
     void commandCallback(
         const void *msgin
     )
@@ -236,13 +268,12 @@ namespace
                 const std_msgs__msg__UInt32 *
             >(msgin);
 
-
         last_command =
             received->data;
 
-
         new_command = true;
     }
+    #endif
 
 
     // ========================================================
@@ -299,9 +330,10 @@ namespace
 
     void resetApplicationFlags()
     {
+        #ifdef TYRANT_ENABLE_DIAGNOSTICS
         new_command = false;
-
         last_command = 0;
+        #endif
 
 
         new_mode_request = false;
@@ -546,6 +578,7 @@ namespace TyrantROS
         // Legacy communication diagnostic.
         // ====================================================
 
+        #ifdef TYRANT_ENABLE_DIAGNOSTICS
         if (
             !recordCreateResult(
                 rclc_publisher_init_default(
@@ -555,22 +588,17 @@ namespace TyrantROS
                         std_msgs,
                         msg,
                         UInt32
-                ),
-                "/tyrant/test_response"
+                    ),
+                    "/tyrant/test_response"
+                )
             )
-            )
-           
         )
         {
             destroyEntities();
-
             return false;
         }
-
-
-        response_pub_initialized =
-            true;
-
+        response_pub_initialized = true;
+        #endif
 
         // ====================================================
         // PUBLISHER:
@@ -671,6 +699,7 @@ namespace TyrantROS
         // Legacy communication diagnostic.
         // ====================================================
 
+       #ifdef TYRANT_ENABLE_DIAGNOSTICS
         if (
             !recordCreateResult(
                 rclc_subscription_init_default(
@@ -679,22 +708,18 @@ namespace TyrantROS
                     ROSIDL_GET_MSG_TYPE_SUPPORT(
                         std_msgs,
                         msg,
-                    UInt32
-                ),
-                "/tyrant/test_command"
-            )
+                        UInt32
+                    ),
+                    "/tyrant/test_command"
+                )
             )
         )
         {
             destroyEntities();
-
             return false;
         }
-
-
-        command_sub_initialized =
-            true;
-
+        command_sub_initialized = true;
+        #endif
 
         // ====================================================
         // SUBSCRIBER:
@@ -801,7 +826,7 @@ namespace TyrantROS
         // ====================================================
         // ADD TEST COMMAND SUBSCRIBER
         // ====================================================
-
+        #ifdef TYRANT_ENABLE_DIAGNOSTICS
         if (
             !recordCreateResult(
                 rclc_executor_add_subscription(
@@ -818,7 +843,7 @@ namespace TyrantROS
 
             return false;
         }
-
+        #endif 
 
         // ====================================================
         // ADD MODE REQUEST SUBSCRIBER
@@ -871,10 +896,10 @@ namespace TyrantROS
         heartbeat_msg.data =
             0;
 
-
+        #ifdef TYRANT_ENABLE_DIAGNOSTICS
         response_msg.data =
             0;
-
+        #endif
 
         resetApplicationFlags();
 
@@ -958,7 +983,7 @@ namespace TyrantROS
         // ====================================================
         // SUBSCRIBERS
         // ====================================================
-
+        #ifdef TYRANT_ENABLE_DIAGNOSTICS
         if (command_sub_initialized)
         {
             consumeRet(
@@ -976,7 +1001,7 @@ namespace TyrantROS
             command_subscriber =
                 rcl_get_zero_initialized_subscription();
         }
-
+        #endif
 
         if (mode_request_sub_initialized)
         {
@@ -1038,7 +1063,7 @@ namespace TyrantROS
                 rcl_get_zero_initialized_publisher();
         }
 
-
+        #ifdef TYRANT_ENABLE_DIAGNOSTICS
         if (response_pub_initialized)
         {
             consumeRet(
@@ -1056,7 +1081,7 @@ namespace TyrantROS
             response_publisher =
                 rcl_get_zero_initialized_publisher();
         }
-
+        #endif
 
         if (mode_status_pub_initialized)
         {
@@ -1271,7 +1296,7 @@ namespace TyrantROS
     // ========================================================
     // LEGACY TEST RESPONSE
     // ========================================================
-
+    #ifdef TYRANT_ENABLE_DIAGNOSTICS
     void publishResponse(
         uint32_t value
     )
@@ -1296,7 +1321,7 @@ namespace TyrantROS
 
         recordPublishResult(ret);
     }
-
+    #endif
 
     // ========================================================
     // PUBLISH CUSTOM MODE STATUS
@@ -1517,12 +1542,11 @@ namespace TyrantROS
     // ========================================================
     // LEGACY TEST COMMAND
     // ========================================================
-
+    #ifdef TYRANT_ENABLE_DIAGNOSTICS
     bool hasNewCommand()
     {
         return new_command;
     }
-
 
     uint32_t getLastCommand()
     {
@@ -1532,7 +1556,7 @@ namespace TyrantROS
 
         return last_command;
     }
-
+    #endif
 
     // ========================================================
     // CUSTOM MODE REQUEST

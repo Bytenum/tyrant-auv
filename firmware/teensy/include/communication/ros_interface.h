@@ -4,6 +4,10 @@
 
 namespace TyrantROS
 {
+    // ========================================================
+    // DATA TYPES
+    // ========================================================
+
     struct ModeRequestData
     {
         uint32_t request_id;
@@ -41,14 +45,11 @@ namespace TyrantROS
 
 
     // ========================================================
-    // APPLICATION COMMUNICATION
+    // PRODUCTION COMMUNICATION
     // ========================================================
 
     void publishHeartbeat();
 
-    void publishResponse(
-        uint32_t value
-    );
 
     void publishModeStatus(
         uint32_t request_id,
@@ -60,6 +61,7 @@ namespace TyrantROS
         bool propulsion_allowed
     );
 
+
     void publishSystemHealth(
         bool communication_healthy,
         bool autonomy_ready,
@@ -67,6 +69,7 @@ namespace TyrantROS
         uint8_t current_mode,
         uint32_t host_heartbeat_age_ms
     );
+
 
     void publishCommunicationDiagnostics(
         uint8_t connection_state,
@@ -81,19 +84,34 @@ namespace TyrantROS
 
 
     // ========================================================
-    // DIAGNOSTICS
+    // COMMUNICATION DIAGNOSTICS
     // ========================================================
 
     ErrorStats getErrorStats();
 
 
     // ========================================================
-    // LEGACY DIAGNOSTIC
+    // OPTIONAL BRING-UP DIAGNOSTICS
+    //
+    // Only available when:
+    // TYRANT_ENABLE_DIAGNOSTICS is defined.
+    //
+    // Topics:
+    // /tyrant/test_command
+    // /tyrant/test_response
     // ========================================================
+
+#ifdef TYRANT_ENABLE_DIAGNOSTICS
+
+    void publishResponse(
+        uint32_t value
+    );
 
     bool hasNewCommand();
 
     uint32_t getLastCommand();
+
+#endif
 
 
     // ========================================================
