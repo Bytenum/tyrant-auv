@@ -1,8 +1,19 @@
 #include "sensors/sensor_manager.h"
 
+#include <Arduino.h>
+
+#include "config/sensor_config.h"
+
 
 namespace
 {
+    TyrantSensors::ImuSource *imu_source =
+        nullptr;
+
+    TyrantSensors::PressureSource *pressure_source =
+        nullptr;
+
+
     TyrantSensors::ImuSample latest_imu {};
 
     TyrantSensors::PressureSample latest_pressure {};
@@ -16,7 +27,6 @@ namespace
         false
     };
 
-
     TyrantSensors::SensorHealth pressure_health {
         TyrantSensors::SensorState::NOT_INITIALIZED,
         0,
@@ -26,21 +36,57 @@ namespace
     };
 
 
-    bool imu_sample_available = false;
+    bool imu_sample_available =
+        false;
 
-    bool pressure_sample_available = false;
+    bool pressure_sample_available =
+        false;
 }
 
 
 namespace TyrantSensors
 {
+
+    void setImuSource(
+        ImuSource &source
+    )
+    {
+        imu_source =
+            &source;
+    }
+
+
+    void setPressureSource(
+        PressureSource &source
+    )
+    {
+        pressure_source =
+            &source;
+    }
+
+
     void init()
     {
-        latest_imu = {};
+        /*
+         * Reset cached samples.
+         */
+        latest_imu =
+            ImuSample {};
 
-        latest_pressure = {};
+        latest_pressure =
+            PressureSample {};
 
 
+        imu_sample_available =
+            false;
+
+        pressure_sample_available =
+            false;
+
+
+        /*
+         * Reset health state.
+         */
         imu_health = {
             SensorState::NOT_INITIALIZED,
             0,
@@ -48,7 +94,6 @@ namespace TyrantSensors
             0,
             false
         };
-
 
         pressure_health = {
             SensorState::NOT_INITIALIZED,
@@ -59,38 +104,225 @@ namespace TyrantSensors
         };
 
 
-        imu_sample_available = false;
+        /*
+         * Initialize IMU source.
+         */
+        if (imu_source == nullptr)
+        {
+            imu_health.state =
+                SensorState::ERROR;
 
-        pressure_sample_available = false;
+            imu_health.error_count++;
+
+            imu_health.valid =
+                false;
+        }
+        else
+        {
+            imu_health.state =
+                SensorState::INITIALIZING;
+
+            if (!imu_source->begin())
+            {
+                imu_health.state =
+                    SensorState::ERROR;
+
+                imu_health.error_count++;
+
+                imu_health.valid =
+                    false;
+            }
+        }
 
 
-        // Hardware drivers will be initialized here
-        // during Phase 3.2 and 3.3.
+        /*
+         * Initialize pressure source.
+         */
+        if (pressure_source == nullptr)
+        {
+            pressure_health.state =
+                SensorState::ERROR;
+
+            pressure_health.error_count++;
+
+            pressure_health.valid =
+                false;
+        }
+        else
+        {
+            pressure_health.state =
+                SensorState::INITIALIZING;
+
+            if (!pressure_source->begin())
+            {
+                pressure_health.state =
+                    SensorState::ERROR;
+
+                pressure_health.error_count++;
+
+                pressure_health.valid =
+                    false;
+            }
+        }
     }
 
 
     void update()
     {
-        // ====================================================
-        // FUTURE PHASE 3.2
-        //
-        // IMU driver polling / sample acquisition
-        // ====================================================
+        /*
+         * =========================
+         * IMU
+         * =========================
+         */
+        if (imu_source != nullptr)
+        {
+            imu_source->update();
 
 
-        // ====================================================
-        // FUTURE PHASE 3.3
-        //
-        // Pressure sensor polling / acquisition
-        // ====================================================
+            ImuSample new_imu_sample {};
 
 
-        // IMPORTANT:
-        //
-        // Do NOT fabricate valid sensor data here.
-        //
-        // Until a real driver has provided a valid sample,
-        // sensor health must remain NOT_INITIALIZED / invalid.
+            if (
+                imu_source->takeSample(
+                    new_imu_sample
+                )
+            )
+            {
+                latest_imu =
+                    new_imu_sample;
+
+                imu_sample_available =
+                    true;
+
+
+                imu_health.state =
+                    SensorState::READY;
+
+                imu_health.sample_count++;
+
+                imu_health.last_update_us =
+                    new_imu_sample.timestamp_us;
+
+                imu_health.valid =
+                    new_imu_sample.valid;
+            }
+        }
+
+
+        /*
+         * IMU stale detection.
+         *
+         * micros() is a 32-bit counter.
+         * Unsigned subtraction keeps this
+         * wrap-safe.
+         */
+        if (
+            imu_health.state ==
+                SensorState::READY
+        )
+        {
+            const uint32_t now_us =
+                micros();
+
+            const uint32_t last_update_us =
+                static_cast<uint32_t>(
+                    imu_health.last_update_us
+                );
+
+            const uint32_t age_us =
+                now_us -
+                last_update_us;
+
+
+            if (
+                age_us >
+                TyrantSensorConfig::
+                    IMU_STALE_TIMEOUT_US
+            )
+            {
+                imu_health.state =
+                    SensorState::STALE;
+
+                imu_health.valid =
+                    false;
+            }
+        }
+
+
+        /*
+         * =========================
+         * PRESSURE
+         * =========================
+         */
+        if (pressure_source != nullptr)
+        {
+            pressure_source->update();
+
+
+            PressureSample new_pressure_sample {};
+
+
+            if (
+                pressure_source->takeSample(
+                    new_pressure_sample
+                )
+            )
+            {
+                latest_pressure =
+                    new_pressure_sample;
+
+                pressure_sample_available =
+                    true;
+
+
+                pressure_health.state =
+                    SensorState::READY;
+
+                pressure_health.sample_count++;
+
+                pressure_health.last_update_us =
+                    new_pressure_sample.timestamp_us;
+
+                pressure_health.valid =
+                    new_pressure_sample.valid;
+            }
+        }
+
+
+        /*
+         * Pressure stale detection.
+         */
+        if (
+            pressure_health.state ==
+                SensorState::READY
+        )
+        {
+            const uint32_t now_us =
+                micros();
+
+            const uint32_t last_update_us =
+                static_cast<uint32_t>(
+                    pressure_health.last_update_us
+                );
+
+            const uint32_t age_us =
+                now_us -
+                last_update_us;
+
+
+            if (
+                age_us >
+                TyrantSensorConfig::
+                    PRESSURE_STALE_TIMEOUT_US
+            )
+            {
+                pressure_health.state =
+                    SensorState::STALE;
+
+                pressure_health.valid =
+                    false;
+            }
+        }
     }
 
 
@@ -103,12 +335,13 @@ namespace TyrantSensors
             return false;
         }
 
-        if (!latest_imu.valid)
-        {
-            return false;
-        }
 
-        sample = latest_imu;
+        sample =
+            latest_imu;
+
+        imu_sample_available =
+            false;
+
 
         return true;
     }
@@ -123,12 +356,13 @@ namespace TyrantSensors
             return false;
         }
 
-        if (!latest_pressure.valid)
-        {
-            return false;
-        }
 
-        sample = latest_pressure;
+        sample =
+            latest_pressure;
+
+        pressure_sample_available =
+            false;
+
 
         return true;
     }
@@ -143,6 +377,89 @@ namespace TyrantSensors
     SensorHealth getPressureHealth()
     {
         return pressure_health;
+    }
+
+
+    uint32_t getImuBytesReceived()
+    {
+        if (imu_source == nullptr)
+        {
+            return 0;
+        }
+
+
+        return
+            imu_source
+                ->getStats()
+                .bytes_received;
+    }
+
+
+    uint32_t getImuRegisterUpdates()
+    {
+        if (imu_source == nullptr)
+        {
+            return 0;
+        }
+
+
+        return
+            imu_source
+                ->getStats()
+                .register_updates;
+    }
+
+
+    uint32_t getImuSamplesProduced()
+    {
+        if (imu_source == nullptr)
+        {
+            return 0;
+        }
+
+
+        return
+            imu_source
+                ->getStats()
+                .samples_produced;
+    }
+
+    uint32_t getPressureReadAttempts()
+    {
+        if (pressure_source == nullptr)
+        {
+            return 0;
+        }
+
+        return pressure_source
+            ->getStats()
+            .read_attempts;
+    }
+
+
+    uint32_t getPressureReadSuccesses()
+    {
+        if (pressure_source == nullptr)
+        {
+            return 0;
+        }
+
+        return pressure_source
+            ->getStats()
+            .read_successes;
+    }
+
+
+    uint32_t getPressureSamplesProduced()
+    {
+        if (pressure_source == nullptr)
+        {
+            return 0;
+        }
+
+        return pressure_source
+            ->getStats()
+            .samples_produced;
     }
 
 
@@ -173,5 +490,5 @@ namespace TyrantSensors
             pressureHealthy()
         );
     }
-}
 
+}

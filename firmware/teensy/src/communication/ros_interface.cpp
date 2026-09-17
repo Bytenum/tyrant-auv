@@ -13,6 +13,8 @@
 #include <tyrant_interfaces/msg/mode_request.h>
 #include <tyrant_interfaces/msg/mode_status.h>
 #include <tyrant_interfaces/msg/system_health.h>
+#include <tyrant_interfaces/msg/imu_telemetry.h>
+#include <tyrant_interfaces/msg/pressure_telemetry.h>
 #include <tyrant_interfaces/msg/communication_diagnostics.h>
 
 
@@ -60,6 +62,12 @@ namespace
     rcl_publisher_t system_health_publisher =
         rcl_get_zero_initialized_publisher();
     
+    rcl_publisher_t imu_telemetry_publisher =
+        rcl_get_zero_initialized_publisher();
+    
+    rcl_publisher_t pressure_telemetry_publisher =
+        rcl_get_zero_initialized_publisher();
+
     rcl_publisher_t communication_diagnostics_publisher =
         rcl_get_zero_initialized_publisher();
 
@@ -107,15 +115,14 @@ namespace
 
 
     bool heartbeat_pub_initialized = false;
-        bool mode_status_pub_initialized = false;
+    bool mode_status_pub_initialized = false;
     bool system_health_pub_initialized = false;
     bool communication_diagnostics_pub_initialized = false;
-
-
+    bool imu_telemetry_pub_initialized = false;
+    bool pressure_telemetry_pub_initialized = false;
     
     bool mode_request_sub_initialized = false;
     bool host_heartbeat_sub_initialized = false;
-
 
     bool executor_initialized = false;
 
@@ -124,8 +131,8 @@ namespace
     bool mode_status_msg_initialized = false;
     bool system_health_msg_initialized = false;
     bool communication_diagnostics_msg_initialized = false;
-
-    
+    bool imu_telemetry_msg_initialized = false;
+    bool pressure_telemetry_msg_initialized = false;
 
     bool entities_ready = false;
 
@@ -171,6 +178,12 @@ namespace
 
     tyrant_interfaces__msg__SystemHealth
         system_health_msg;
+    
+    tyrant_interfaces__msg__ImuTelemetry
+        imu_telemetry_msg;
+    
+    tyrant_interfaces__msg__PressureTelemetry
+        pressure_msg;
 
     tyrant_interfaces__msg__CommunicationDiagnostics
         communication_diagnostics_msg;
@@ -467,8 +480,37 @@ namespace TyrantROS
         }
         system_health_msg_initialized =
             true;
+        if (
+            !tyrant_interfaces__msg__ImuTelemetry__init(
+                &imu_telemetry_msg
+            )
+        )
+        {
+            entity_create_failures++;
 
+            destroyEntities();
 
+            return false;
+        }
+
+        imu_telemetry_msg_initialized =
+            true;
+
+        if (
+            !tyrant_interfaces__msg__PressureTelemetry__init(
+                &pressure_msg
+            )
+        )
+        {
+            entity_create_failures++;
+
+            destroyEntities();
+
+            return false;
+        }
+
+        pressure_telemetry_msg_initialized =
+            true;
         if (
             !tyrant_interfaces__msg__CommunicationDiagnostics__init(
                 &communication_diagnostics_msg
@@ -659,9 +701,30 @@ namespace TyrantROS
 
             return false;
         }
-
-
         system_health_pub_initialized =
+            true;
+
+        if (
+            !recordCreateResult(
+                rclc_publisher_init_default(
+                    &imu_telemetry_publisher,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
+                        tyrant_interfaces,
+                        msg,
+                        ImuTelemetry
+                    ),
+                    "/tyrant/sensors/imu"
+                )
+            )
+        )
+        {
+            destroyEntities();
+
+            return false;
+        }
+
+        imu_telemetry_pub_initialized =
             true;
         // ====================================================
         // PUBLISHER:
@@ -669,7 +732,28 @@ namespace TyrantROS
         //
         // Custom Tyrant communication diagnostics.
         // ====================================================
+        if (
+            !recordCreateResult(
+                rclc_publisher_init_default(
+                    &pressure_telemetry_publisher,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
+                        tyrant_interfaces,
+                        msg,
+                        PressureTelemetry
+                    ),
+                    "/tyrant/sensors/pressure"
+                )
+            )
+        )
+        {
+            destroyEntities();
 
+            return false;
+        }
+
+        pressure_telemetry_pub_initialized =
+            true;
         if (
             !recordCreateResult(
                 rclc_publisher_init_default(
@@ -689,6 +773,8 @@ namespace TyrantROS
 
             return false;
         }
+        
+
 
         communication_diagnostics_pub_initialized = true;
 
@@ -1119,7 +1205,41 @@ namespace TyrantROS
             system_health_publisher =
                 rcl_get_zero_initialized_publisher();
         }
-        
+
+        if (
+            imu_telemetry_pub_initialized
+        )
+        {
+            recordDestroyResult(
+                rcl_publisher_fini(
+                    &imu_telemetry_publisher,
+                    &node
+                )
+            );
+
+            imu_telemetry_pub_initialized =
+                false;
+
+            imu_telemetry_publisher =
+                rcl_get_zero_initialized_publisher();
+        }
+        if (
+            pressure_telemetry_pub_initialized
+        )
+        {
+            recordDestroyResult(
+                rcl_publisher_fini(
+                    &pressure_telemetry_publisher,
+                    &node
+                )
+            );
+
+            pressure_telemetry_pub_initialized =
+                false;
+
+            pressure_telemetry_publisher =
+                rcl_get_zero_initialized_publisher();
+        }
         if (communication_diagnostics_pub_initialized)
         {
             recordDestroyResult(
@@ -1216,6 +1336,30 @@ namespace TyrantROS
 
 
             mode_request_msg_initialized =
+                false;
+        }
+        
+        if (
+            imu_telemetry_msg_initialized
+        )
+        {
+            tyrant_interfaces__msg__ImuTelemetry__fini(
+                &imu_telemetry_msg
+            );
+
+            imu_telemetry_msg_initialized =
+                false;
+        }
+
+        if (
+            pressure_telemetry_msg_initialized
+        )
+        {
+            tyrant_interfaces__msg__PressureTelemetry__fini(
+                &pressure_msg
+            );
+
+            pressure_telemetry_msg_initialized =
                 false;
         }
 
@@ -1463,6 +1607,165 @@ namespace TyrantROS
             rcl_publish(
                 &system_health_publisher,
                 &system_health_msg,
+                nullptr
+            );
+
+
+        recordPublishResult(ret);
+    }
+    
+    // ========================================================
+    // PUBLISH IMU TELEMETRY
+    // ========================================================   
+    
+    void publishImuTelemetry(
+        uint8_t sensor_state,
+        uint32_t sequence,
+        uint64_t timestamp_us,
+
+        float accel_x,
+        float accel_y,
+        float accel_z,
+
+        float gyro_x,
+        float gyro_y,
+        float gyro_z,
+
+        bool valid,
+
+        uint32_t bytes_received,
+        uint32_t register_updates,
+        uint32_t samples_produced,
+        uint32_t error_count
+    )
+    {
+        if (!entities_ready)
+        {
+            return;
+        }
+
+
+        imu_telemetry_msg.sensor_state =
+            sensor_state;
+
+        imu_telemetry_msg.sequence =
+            sequence;
+
+        imu_telemetry_msg.timestamp_us =
+            timestamp_us;
+
+
+        imu_telemetry_msg.accel_x =
+            accel_x;
+
+        imu_telemetry_msg.accel_y =
+            accel_y;
+
+        imu_telemetry_msg.accel_z =
+            accel_z;
+
+
+        imu_telemetry_msg.gyro_x =
+            gyro_x;
+
+        imu_telemetry_msg.gyro_y =
+            gyro_y;
+
+        imu_telemetry_msg.gyro_z =
+            gyro_z;
+
+
+        imu_telemetry_msg.valid =
+            valid;
+
+
+        imu_telemetry_msg.bytes_received =
+            bytes_received;
+
+        imu_telemetry_msg.register_updates =
+            register_updates;
+
+        imu_telemetry_msg.samples_produced =
+            samples_produced;
+
+        imu_telemetry_msg.error_count =
+            error_count;
+
+
+        const rcl_ret_t ret =
+            rcl_publish(
+                &imu_telemetry_publisher,
+                &imu_telemetry_msg,
+                nullptr
+            );
+
+
+        recordPublishResult(ret);
+}
+    // ========================================================
+    // PUBLISH PRESSURE TELEMETRY
+    // ========================================================
+
+    void publishPressureTelemetry(
+        uint8_t sensor_state,
+        uint32_t sequence,
+        uint64_t timestamp_us,
+
+        float pressure_pa,
+        float temperature_c,
+
+        bool valid,
+
+        uint32_t read_attempts,
+        uint32_t read_successes,
+        uint32_t samples_produced,
+        uint32_t error_count
+    )
+    {
+        if (!entities_ready)
+        {
+            return;
+        }
+
+
+        pressure_msg.sensor_state =
+            sensor_state;
+
+        pressure_msg.sequence =
+            sequence;
+
+        pressure_msg.timestamp_us =
+            timestamp_us;
+
+
+        pressure_msg.pressure_pa =
+            pressure_pa;
+
+        pressure_msg.temperature_c =
+            temperature_c;
+
+
+        pressure_msg.valid =
+            valid;
+
+
+        pressure_msg.read_attempts =
+            read_attempts;
+
+        pressure_msg.read_successes =
+            read_successes;
+
+        pressure_msg.samples_produced =
+            samples_produced;
+
+        pressure_msg.error_count =
+            error_count;
+
+
+        const rcl_ret_t ret =
+            rcl_publish(
+                &pressure_telemetry_publisher,
+                &pressure_msg,
                 nullptr
             );
 

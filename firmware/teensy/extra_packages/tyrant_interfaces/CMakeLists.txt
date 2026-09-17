@@ -13,6 +13,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ModeStatus.msg"
   "msg/SystemHealth.msg"
   "msg/CommunicationDiagnostics.msg"
+  "msg/ImuTelemetry.msg"
+  "msg/PressureTelemetry.msg"
   DEPENDENCIES
   std_msgs
   geometry_msgs

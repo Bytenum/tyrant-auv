@@ -70,6 +70,43 @@ namespace TyrantROS
         uint32_t host_heartbeat_age_ms
     );
 
+    void publishImuTelemetry(
+        uint8_t sensor_state,
+        uint32_t sequence,
+        uint64_t timestamp_us,
+
+        float accel_x,
+        float accel_y,
+        float accel_z,
+
+        float gyro_x,
+        float gyro_y,
+        float gyro_z,
+
+        bool valid,
+
+        uint32_t bytes_received,
+        uint32_t register_updates,
+        uint32_t samples_produced,
+        uint32_t error_count
+    );
+
+    void publishPressureTelemetry(
+        uint8_t sensor_state,
+        uint32_t sequence,
+        uint64_t timestamp_us,
+
+        float pressure_pa,
+        float temperature_c,
+
+        bool valid,
+
+        uint32_t read_attempts,
+        uint32_t read_successes,
+        uint32_t samples_produced,
+        uint32_t error_count
+    );
+
 
     void publishCommunicationDiagnostics(
         uint8_t connection_state,

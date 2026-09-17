@@ -7,6 +7,7 @@
 #include "safety/safety_manager.h"
 
 #include "sensors/sensor_manager.h"
+#include "sensors/sensor_hardware.h"
 
 namespace
 {
@@ -28,6 +29,11 @@ void setup()
 
     TyrantSafety::init();
 
+    // ========================================================
+    // SENSORS
+    // ========================================================
+    TyrantSensors::bindProductionSensors();
+    TyrantSensors::init();
 
     // ========================================================
     // PHYSICAL MICRO-ROS TRANSPORT
@@ -41,7 +47,6 @@ void setup()
     // ========================================================
 
     TyrantConnection::init();
-
 
     // ========================================================
     // SCHEDULER
@@ -58,6 +63,11 @@ void loop()
     // ========================================================
 
     TyrantConnection::update();
+
+    // ========================================================
+    // sensor manager
+    // ========================================================
+    TyrantSensors::update();
 
 
     // ========================================================
@@ -225,7 +235,7 @@ if (
     // SYSTEM HEALTH TELEMETRY — 5 Hz
     // ========================================================
 
-    if (
+   if (
         TyrantScheduler::healthDue()
     )
     {
@@ -240,8 +250,123 @@ if (
                 TyrantSafety::getMode(),
                 TyrantSafety::hostHeartbeatAgeMs()
             );
+
+
+            TyrantSensors::ImuSample imu_sample {};
+
+            const bool imu_available =
+                TyrantSensors::getLatestImu(
+                    imu_sample
+                );
+
+            const auto imu_health =
+                TyrantSensors::getImuHealth();
+
+
+            TyrantROS::publishImuTelemetry(
+                static_cast<uint8_t>(
+                    imu_health.state
+                ),
+
+                imu_available
+                    ? imu_sample.sequence
+                    : 0,
+
+                imu_available
+                    ? imu_sample.timestamp_us
+                    : 0,
+
+                imu_available
+                    ? imu_sample.accel_x
+                    : 0.0f,
+
+                imu_available
+                    ? imu_sample.accel_y
+                    : 0.0f,
+
+                imu_available
+                    ? imu_sample.accel_z
+                    : 0.0f,
+
+                imu_available
+                    ? imu_sample.gyro_x
+                    : 0.0f,
+
+                imu_available
+                    ? imu_sample.gyro_y
+                    : 0.0f,
+
+                imu_available
+                    ? imu_sample.gyro_z
+                    : 0.0f,
+
+                imu_available &&
+                    imu_health.valid,
+
+                TyrantSensors::
+                    getImuBytesReceived(),
+
+                TyrantSensors::
+                    getImuRegisterUpdates(),
+
+                TyrantSensors::
+                    getImuSamplesProduced(),
+
+                imu_health.error_count
+            );
+                TyrantSensors::PressureSample
+                pressure_sample {};
+
+
+            const bool pressure_available =
+                TyrantSensors::getLatestPressure(
+                    pressure_sample
+                );
+
+
+            const auto pressure_health =
+                TyrantSensors::getPressureHealth();
+
+
+            TyrantROS::publishPressureTelemetry(
+                static_cast<uint8_t>(
+                    pressure_health.state
+                ),
+
+                pressure_available
+                    ? pressure_sample.sequence
+                    : 0,
+
+                pressure_available
+                    ? pressure_sample.timestamp_us
+                    : 0,
+
+                pressure_available
+                    ? pressure_sample.pressure_pa
+                    : 0.0f,
+
+                pressure_available
+                    ? pressure_sample.temperature_c
+                    : 0.0f,
+
+                pressure_available &&
+                    pressure_health.valid,
+
+                TyrantSensors::
+                    getPressureReadAttempts(),
+
+                TyrantSensors::
+                    getPressureReadSuccesses(),
+
+                TyrantSensors::
+                    getPressureSamplesProduced(),
+
+                pressure_health.error_count
+            );
         }
     }
+    
+
 
     // ========================================================
     // SAFETY TASK
