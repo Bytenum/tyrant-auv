@@ -23,6 +23,13 @@ namespace TyrantROS
         uint32_t entity_destroy_failures;
     };
 
+    struct DepthReferenceRequestData
+    {
+        uint32_t request_id;
+
+        uint8_t command;
+    };
+
 
     // ========================================================
     // CONNECTION LIFECYCLE
@@ -119,7 +126,14 @@ namespace TyrantROS
         uint32_t entity_destroy_failures
     );
 
-
+    void publishDepthReferenceStatus(
+        uint32_t request_id,
+        uint8_t command,
+        bool accepted,
+        uint8_t reason,
+        bool reference_valid,
+        float surface_pressure_pa
+    );
     // ========================================================
     // COMMUNICATION DIAGNOSTICS
     // ========================================================
@@ -157,6 +171,10 @@ namespace TyrantROS
 
     bool takeModeRequest(
         ModeRequestData &request
+    );
+
+    bool takeDepthReferenceRequest(
+        DepthReferenceRequestData &request
     );
 
 

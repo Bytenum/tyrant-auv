@@ -4,9 +4,21 @@
 
 #include "config/sensor_config.h"
 
+#include "sensors/depth_estimator.h"
 
 namespace
 {
+    TyrantSensors::DepthEstimator
+        depth_estimator;
+
+
+    TyrantSensors::DepthMeasurement
+        latest_depth {};
+
+
+    bool depth_measurement_available =
+        false;
+
     TyrantSensors::ImuSource *imu_source =
         nullptr;
 
@@ -46,6 +58,101 @@ namespace
 
 namespace TyrantSensors
 {
+    bool setDepthSurfaceReference()
+    {
+        if (
+            pressure_health.state !=
+                SensorState::READY
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            !pressure_health.valid ||
+            !latest_pressure.valid
+        )
+        {
+            return false;
+        }
+
+
+        if (
+            !depth_estimator.setSurfacePressure(
+                latest_pressure.pressure_pa
+            )
+        )
+        {
+            return false;
+        }
+
+
+        DepthMeasurement measurement {};
+
+
+        depth_estimator.estimateMeasurement(
+            latest_pressure,
+            measurement
+        );
+
+
+        latest_depth =
+            measurement;
+
+
+        depth_measurement_available =
+            true;
+
+
+        return true;
+    }
+
+
+    void clearDepthSurfaceReference()
+    {
+        depth_estimator.clearSurfaceReference();
+
+
+        latest_depth.depth_m =
+            0.0f;
+
+        latest_depth.valid =
+            false;
+
+
+        depth_measurement_available =
+            true;
+    }
+
+
+    bool depthSurfaceReferenceValid()
+    {
+        return depth_estimator
+            .surfaceReferenceValid();
+    }
+
+
+    bool getLatestDepth(
+        DepthMeasurement &measurement
+    )
+    {
+        if (!depth_measurement_available)
+        {
+            return false;
+        }
+
+
+        measurement =
+            latest_depth;
+
+
+        depth_measurement_available =
+            false;
+
+
+        return true;
+    }
 
     void setImuSource(
         ImuSource &source
@@ -82,7 +189,12 @@ namespace TyrantSensors
 
         pressure_sample_available =
             false;
+        latest_depth = {};
 
+        depth_measurement_available =
+            false;
+
+        depth_estimator.clearSurfaceReference();
 
         /*
          * Reset health state.
@@ -285,6 +397,20 @@ namespace TyrantSensors
 
                 pressure_health.valid =
                     new_pressure_sample.valid;
+
+                DepthMeasurement new_depth {};
+                depth_estimator.estimateMeasurement(
+                    new_pressure_sample,
+                    new_depth
+                );
+
+
+                latest_depth =
+                    new_depth;
+
+
+                depth_measurement_available =
+                    true;
             }
         }
 
@@ -318,9 +444,12 @@ namespace TyrantSensors
             {
                 pressure_health.state =
                     SensorState::STALE;
-
                 pressure_health.valid =
                     false;
+                latest_depth.valid =
+                    false;
+                depth_measurement_available =
+                    true;
             }
         }
     }

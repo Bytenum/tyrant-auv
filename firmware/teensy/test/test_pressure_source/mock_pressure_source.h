@@ -13,6 +13,20 @@ public:
     {
         producing_ = producing;
     }
+    void setPressurePa(
+        float pressure_pa)
+    {
+        pressure_pa_ =
+            pressure_pa;
+    }
+
+
+    void setTemperatureC(
+        float temperature_c)
+    {
+        temperature_c_ =
+            temperature_c;
+    }
 
 
     bool begin() override
@@ -59,10 +73,10 @@ public:
             micros();
 
         sample_.pressure_pa =
-            101325.0f;
+            pressure_pa_;
 
         sample_.temperature_c =
-            25.0f;
+            temperature_c_;
 
         sample_.valid =
             true;
@@ -113,10 +127,10 @@ private:
 
     bool sample_available_ = false;
 
-
     uint32_t sequence_ = 0;
-
-
+    float pressure_pa_ = 101325.0f;
+    float temperature_c_ = 25.0f;
+    
     TyrantSensors::PressureSample sample_ {};
 
 

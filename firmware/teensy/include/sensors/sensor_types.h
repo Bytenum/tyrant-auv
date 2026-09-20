@@ -70,6 +70,17 @@ namespace TyrantSensors
 
         bool valid;
     };
+    
+    struct DepthMeasurement
+    {
+        uint32_t sequence;
+
+        uint64_t timestamp_us;
+
+        float depth_m;
+
+        bool valid;
+    };
 
 
     // ========================================================

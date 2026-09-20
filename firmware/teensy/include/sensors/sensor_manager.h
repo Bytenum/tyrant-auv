@@ -60,4 +60,18 @@ namespace TyrantSensors
     bool pressureHealthy();
 
     bool requiredSensorsHealthy();
+
+    // ========================================================
+    // DEPTH PROCESSING
+    // ========================================================
+
+    bool setDepthSurfaceReference();
+
+    void clearDepthSurfaceReference();
+
+    bool depthSurfaceReferenceValid();
+
+    bool getLatestDepth(
+        DepthMeasurement &measurement
+    );
 }

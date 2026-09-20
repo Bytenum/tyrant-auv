@@ -15,6 +15,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CommunicationDiagnostics.msg"
   "msg/ImuTelemetry.msg"
   "msg/PressureTelemetry.msg"
+  "msg/DepthReferenceRequest.msg"
+  "msg/DepthReferenceStatus.msg"
   DEPENDENCIES
   std_msgs
   geometry_msgs

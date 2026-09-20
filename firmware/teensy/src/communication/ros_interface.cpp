@@ -15,7 +15,10 @@
 #include <tyrant_interfaces/msg/system_health.h>
 #include <tyrant_interfaces/msg/imu_telemetry.h>
 #include <tyrant_interfaces/msg/pressure_telemetry.h>
+#include <tyrant_interfaces/msg/depth_reference_request.h>
+#include <tyrant_interfaces/msg/depth_reference_status.h>
 #include <tyrant_interfaces/msg/communication_diagnostics.h>
+
 
 
 // ============================================================
@@ -67,7 +70,8 @@ namespace
     
     rcl_publisher_t pressure_telemetry_publisher =
         rcl_get_zero_initialized_publisher();
-
+    rcl_publisher_t depth_reference_status_publisher =
+        rcl_get_zero_initialized_publisher();
     rcl_publisher_t communication_diagnostics_publisher =
         rcl_get_zero_initialized_publisher();
 
@@ -86,6 +90,9 @@ namespace
 
 
     rcl_subscription_t host_heartbeat_subscriber =
+        rcl_get_zero_initialized_subscription();
+    
+    rcl_subscription_t depth_reference_request_subscriber =
         rcl_get_zero_initialized_subscription();
 
     // ========================================================
@@ -119,11 +126,13 @@ namespace
     bool system_health_pub_initialized = false;
     bool communication_diagnostics_pub_initialized = false;
     bool imu_telemetry_pub_initialized = false;
+    bool depth_reference_status_pub_initialized = false;
     bool pressure_telemetry_pub_initialized = false;
+    
     
     bool mode_request_sub_initialized = false;
     bool host_heartbeat_sub_initialized = false;
-
+    bool depth_reference_request_sub_initialized = false;
     bool executor_initialized = false;
 
 
@@ -133,6 +142,8 @@ namespace
     bool communication_diagnostics_msg_initialized = false;
     bool imu_telemetry_msg_initialized = false;
     bool pressure_telemetry_msg_initialized = false;
+    bool depth_reference_status_msg_initialized = false;
+    bool depth_reference_request_msg_initialized = false;
 
     bool entities_ready = false;
 
@@ -185,6 +196,12 @@ namespace
     tyrant_interfaces__msg__PressureTelemetry
         pressure_msg;
 
+    tyrant_interfaces__msg__DepthReferenceRequest
+        depth_reference_request_msg;
+
+    tyrant_interfaces__msg__DepthReferenceStatus
+        depth_reference_status_msg;
+
     tyrant_interfaces__msg__CommunicationDiagnostics
         communication_diagnostics_msg;
 
@@ -212,7 +229,9 @@ namespace
     uint32_t entity_create_failures = 0;
     uint32_t entity_destroy_failures = 0;
 
-
+    bool new_depth_reference_request = false;
+    uint32_t depth_reference_request_id =0;
+    uint8_t depth_reference_command =0;
     // ========================================================
     // HELPER
     //
@@ -336,7 +355,28 @@ namespace
         new_host_heartbeat = true;
     }
 
+    // ========================================================
+    // CALLBACK: DEPTH REFERENCE REQUEST
+    // ========================================================
+    void depthReferenceRequestCallback(
+        const void *msgin
+    )
+    {
+        const auto *received =
+            static_cast<
+                const tyrant_interfaces__msg__DepthReferenceRequest *
+            >(msgin);
 
+
+        depth_reference_request_id =
+            received->request_id;
+
+        depth_reference_command =
+            received->command;
+
+        new_depth_reference_request =
+            true;
+    }
     // ========================================================
     // RESET APPLICATION FLAGS
     // ========================================================
@@ -350,15 +390,13 @@ namespace
 
 
         new_mode_request = false;
-
         requested_mode_id = 0;
-
         requested_mode = 0;
-
-
         new_host_heartbeat = false;
-
         host_heartbeat_value = 0;
+        new_depth_reference_request = false;
+        depth_reference_request_id = 0;
+        depth_reference_command = 0;
     }
 }
 
@@ -523,8 +561,41 @@ namespace TyrantROS
 
             return false;
         }
-
         communication_diagnostics_msg_initialized = true;
+        if (
+            !tyrant_interfaces__msg__DepthReferenceRequest__init(
+                &depth_reference_request_msg
+            )
+        )
+        {
+            entity_create_failures++;
+
+            destroyEntities();
+
+            return false;
+        }
+
+        depth_reference_request_msg_initialized =
+            true;
+
+
+        if (
+            !tyrant_interfaces__msg__DepthReferenceStatus__init(
+                &depth_reference_status_msg
+            )
+        )
+        {
+            entity_create_failures++;
+
+            destroyEntities();
+
+            return false;
+        }
+
+        depth_reference_status_msg_initialized =
+            true;
+
+
         // ====================================================
         // RCLC SUPPORT
         // ====================================================
@@ -751,9 +822,31 @@ namespace TyrantROS
 
             return false;
         }
-
-        pressure_telemetry_pub_initialized =
+            pressure_telemetry_pub_initialized =
             true;
+        if (
+            !recordCreateResult(
+                rclc_publisher_init_default(
+                    &depth_reference_status_publisher,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
+                        tyrant_interfaces,
+                        msg,
+                        DepthReferenceStatus
+                    ),
+                    "/tyrant/depth/reference/status"
+                )
+            )
+        )
+        {
+            destroyEntities();
+
+            return false;
+        }
+
+        depth_reference_status_pub_initialized =
+            true;
+
         if (
             !recordCreateResult(
                 rclc_publisher_init_default(
@@ -869,7 +962,28 @@ namespace TyrantROS
 
         host_heartbeat_sub_initialized =
             true;
+        if (
+            !recordCreateResult(
+                rclc_subscription_init_default(
+                    &depth_reference_request_subscriber,
+                    &node,
+                    ROSIDL_GET_MSG_TYPE_SUPPORT(
+                        tyrant_interfaces,
+                        msg,
+                        DepthReferenceRequest
+                    ),
+                    "/tyrant/depth/reference/request"
+                )
+            )
+        )
+        {
+            destroyEntities();
 
+            return false;
+        }
+
+        depth_reference_request_sub_initialized =
+            true;
 
         // ====================================================
         // EXECUTOR
@@ -893,7 +1007,7 @@ namespace TyrantROS
             !recordCreateResult(rclc_executor_init(
                 &executor,
                 &support.context,
-                3,
+                EXECUTOR_HANDLE_COUNT,
                 &allocator
             )
             )
@@ -964,6 +1078,23 @@ namespace TyrantROS
                     &host_heartbeat_subscriber,
                     &host_heartbeat_msg,
                     &hostHeartbeatCallback,
+                    ON_NEW_DATA
+                )
+            )
+        )
+        {
+            destroyEntities();
+
+            return false;
+        }
+
+        if (
+            !recordCreateResult(
+                rclc_executor_add_subscription(
+                    &executor,
+                    &depth_reference_request_subscriber,
+                    &depth_reference_request_msg,
+                    &depthReferenceRequestCallback,
                     ON_NEW_DATA
                 )
             )
@@ -1126,6 +1257,22 @@ namespace TyrantROS
                 rcl_get_zero_initialized_subscription();
         }
 
+        if (depth_reference_request_sub_initialized)
+        {
+            recordDestroyResult(
+                rcl_subscription_fini(
+                    &depth_reference_request_subscriber,
+                    &node
+                )
+            );
+
+            depth_reference_request_sub_initialized =
+                false;
+
+            depth_reference_request_subscriber =
+                rcl_get_zero_initialized_subscription();
+        }
+
 
         // ====================================================
         // PUBLISHERS
@@ -1240,6 +1387,23 @@ namespace TyrantROS
             pressure_telemetry_publisher =
                 rcl_get_zero_initialized_publisher();
         }
+
+        if (depth_reference_status_pub_initialized)
+        {
+            recordDestroyResult(
+                rcl_publisher_fini(
+                    &depth_reference_status_publisher,
+                    &node
+                )
+            );
+
+            depth_reference_status_pub_initialized =
+                false;
+
+            depth_reference_status_publisher =
+                rcl_get_zero_initialized_publisher();
+        }
+
         if (communication_diagnostics_pub_initialized)
         {
             recordDestroyResult(
@@ -1370,6 +1534,26 @@ namespace TyrantROS
             );
 
             communication_diagnostics_msg_initialized =
+                false;
+        }
+        if (depth_reference_request_msg_initialized)
+        {
+            tyrant_interfaces__msg__DepthReferenceRequest__fini(
+                &depth_reference_request_msg
+            );
+
+            depth_reference_request_msg_initialized =
+                false;
+        }
+
+
+        if (depth_reference_status_msg_initialized)
+        {
+            tyrant_interfaces__msg__DepthReferenceStatus__fini(
+                &depth_reference_status_msg
+            );
+
+            depth_reference_status_msg_initialized =
                 false;
         }
 
@@ -1773,6 +1957,58 @@ namespace TyrantROS
         recordPublishResult(ret);
     }
     // ========================================================
+    // PUBLISH DEPTH REFERENCE STATUS
+    // ========================================================
+    void publishDepthReferenceStatus(
+        uint32_t request_id,
+        uint8_t command,
+        bool accepted,
+        uint8_t reason,
+        bool reference_valid,
+        float surface_pressure_pa
+    )
+    {
+        if (!entities_ready)
+        {
+            return;
+        }
+
+
+        depth_reference_status_msg.request_id =
+            request_id;
+
+
+        depth_reference_status_msg.command =
+            command;
+
+
+        depth_reference_status_msg.accepted =
+            accepted;
+
+
+        depth_reference_status_msg.reason =
+            reason;
+
+
+        depth_reference_status_msg.reference_valid =
+            reference_valid;
+
+
+        depth_reference_status_msg.surface_pressure_pa =
+            surface_pressure_pa;
+
+
+        const rcl_ret_t ret =
+            rcl_publish(
+                &depth_reference_status_publisher,
+                &depth_reference_status_msg,
+                nullptr
+            );
+
+
+        recordPublishResult(ret);
+    }
+    // ========================================================
     // PUBLISH Communication Diagnostics
     // ========================================================
     void publishCommunicationDiagnostics(
@@ -1889,8 +2125,33 @@ namespace TyrantROS
 
         return true;
     }
+    // ========================================================
+    // CUSTOM DEPTH REFERENCE REQUEST
+    // ========================================================
+    bool takeDepthReferenceRequest(
+        DepthReferenceRequestData &request
+    )
+    {
+        if (!new_depth_reference_request)
+        {
+            return false;
+        }
 
 
+        request.request_id =
+            depth_reference_request_id;
+
+
+        request.command =
+            depth_reference_command;
+
+
+        new_depth_reference_request =
+            false;
+
+
+        return true;
+    }
     // ========================================================
     // HOST HEARTBEAT
     // ========================================================
