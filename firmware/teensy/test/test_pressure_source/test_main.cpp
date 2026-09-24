@@ -86,7 +86,7 @@ void test_pressure_sample()
 
 
     TEST_ASSERT_TRUE(
-        TyrantSensors::getLatestPressure(
+        TyrantSensors::getPressureSnapshot(
             sample
         )
     );
@@ -204,8 +204,152 @@ void test_pressure_becomes_stale()
     TEST_ASSERT_FALSE(
         health.valid
     );
+
+    TyrantSensors::PressureSample
+        stale_sample {};
+
+
+    TEST_ASSERT_FALSE(
+        TyrantSensors::takePressureSample(
+            stale_sample
+        )
+    );
 }
 
+void test_pressure_snapshot_is_non_destructive()
+{
+    TyrantSensors::setPressureSource(
+        mock_pressure
+    );
+
+    TyrantSensors::init();
+
+    TyrantSensors::update();
+
+
+    TyrantSensors::PressureSample
+        first_snapshot {};
+
+    TyrantSensors::PressureSample
+        second_snapshot {};
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getPressureSnapshot(
+            first_snapshot
+        )
+    );
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getPressureSnapshot(
+            second_snapshot
+        )
+    );
+
+
+    TEST_ASSERT_EQUAL_UINT32(
+        first_snapshot.sequence,
+        second_snapshot.sequence
+    );
+}
+
+void test_pressure_take_does_not_remove_snapshot()
+{
+    TyrantSensors::setPressureSource(
+        mock_pressure
+    );
+
+    TyrantSensors::init();
+
+    TyrantSensors::update();
+
+
+    TyrantSensors::PressureSample
+        stream_sample {};
+
+    TyrantSensors::PressureSample
+        snapshot {};
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::takePressureSample(
+            stream_sample
+        )
+    );
+
+
+    TEST_ASSERT_FALSE(
+        TyrantSensors::takePressureSample(
+            stream_sample
+        )
+    );
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getPressureSnapshot(
+            snapshot
+        )
+    );
+
+
+    TEST_ASSERT_EQUAL_UINT32(
+        stream_sample.sequence,
+        snapshot.sequence
+    );
+}
+void test_nan_pressure_rejected_from_processing_stream()
+{
+    TyrantSensors::setPressureSource(
+        mock_pressure
+    );
+
+    TyrantSensors::init();
+
+
+    mock_pressure.setPressurePa(
+        NAN
+    );
+
+
+    TyrantSensors::update();
+
+
+    const auto health =
+        TyrantSensors::getPressureHealth();
+
+
+    TEST_ASSERT_FALSE(
+        health.valid
+    );
+
+
+    TyrantSensors::PressureSample
+        snapshot {};
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getPressureSnapshot(
+            snapshot
+        )
+    );
+
+
+    TEST_ASSERT_FALSE(
+        snapshot.valid
+    );
+
+
+    TyrantSensors::PressureSample
+        processing_sample {};
+
+
+    TEST_ASSERT_FALSE(
+        TyrantSensors::takePressureSample(
+            processing_sample
+        )
+    );
+}
 
 void setup()
 {
@@ -241,6 +385,18 @@ void setup()
         test_pressure_becomes_stale
     );
 
+    RUN_TEST(
+        test_pressure_snapshot_is_non_destructive
+    );
+
+
+    RUN_TEST(
+        test_pressure_take_does_not_remove_snapshot
+    );
+    
+    RUN_TEST(
+        test_nan_pressure_rejected_from_processing_stream
+    );
 
     UNITY_END();
 }

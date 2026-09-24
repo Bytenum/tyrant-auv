@@ -71,7 +71,7 @@ void test_mock_imu_sample()
 
 
     TEST_ASSERT_TRUE(
-        TyrantSensors::getLatestImu(
+        TyrantSensors::getImuSnapshot(
             sample
         )
     );
@@ -173,6 +173,16 @@ void test_imu_becomes_stale()
     TEST_ASSERT_FALSE(
         health.valid
     );
+
+    TyrantSensors::ImuSample
+        stale_sample {};
+
+
+    TEST_ASSERT_FALSE(
+        TyrantSensors::takeImuSample(
+            stale_sample
+        )
+    );
 }
 
 
@@ -211,9 +221,200 @@ void test_mock_stats()
         TyrantSensors::
             getImuRegisterUpdates()
     );
+    TEST_ASSERT_EQUAL_UINT32(
+        0,
+        TyrantSensors::
+            getImuSamplesDropped()
+    );
 }
 
+void test_imu_snapshot_is_non_destructive()
+{
+    TyrantSensors::setImuSource(
+        mock_imu
+    );
 
+    TyrantSensors::init();
+
+    TyrantSensors::update();
+
+
+    TyrantSensors::ImuSample
+        first_snapshot {};
+
+    TyrantSensors::ImuSample
+        second_snapshot {};
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getImuSnapshot(
+            first_snapshot
+        )
+    );
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getImuSnapshot(
+            second_snapshot
+        )
+    );
+
+
+    TEST_ASSERT_EQUAL_UINT32(
+        first_snapshot.sequence,
+        second_snapshot.sequence
+    );
+}
+
+void test_imu_take_is_destructive_but_snapshot_remains()
+{
+    TyrantSensors::setImuSource(
+        mock_imu
+    );
+
+    TyrantSensors::init();
+
+    TyrantSensors::update();
+
+
+    TyrantSensors::ImuSample
+        estimator_sample {};
+
+    TyrantSensors::ImuSample
+        snapshot {};
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::takeImuSample(
+            estimator_sample
+        )
+    );
+
+
+    TEST_ASSERT_FALSE(
+        TyrantSensors::takeImuSample(
+            estimator_sample
+        )
+    );
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getImuSnapshot(
+            snapshot
+        )
+    );
+
+
+    TEST_ASSERT_EQUAL_UINT32(
+        estimator_sample.sequence,
+        snapshot.sequence
+    );
+}
+
+void test_nan_imu_rejected_from_estimator_stream()
+{
+    TyrantSensors::setImuSource(
+        mock_imu
+    );
+
+    TyrantSensors::init();
+
+
+    mock_imu.setAccelX(
+        NAN
+    );
+
+
+    TyrantSensors::update();
+
+
+    const auto health =
+        TyrantSensors::getImuHealth();
+
+
+    TEST_ASSERT_FALSE(
+        health.valid
+    );
+
+
+    TyrantSensors::ImuSample
+        snapshot {};
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getImuSnapshot(
+            snapshot
+        )
+    );
+
+
+    TEST_ASSERT_FALSE(
+        snapshot.valid
+    );
+
+
+    TyrantSensors::ImuSample
+        estimator_sample {};
+
+
+    TEST_ASSERT_FALSE(
+        TyrantSensors::takeImuSample(
+            estimator_sample
+        )
+    );
+}
+void test_imu_contains_9_axis_data()
+{
+    TyrantSensors::setImuSource(
+        mock_imu
+    );
+
+    TyrantSensors::init();
+
+    TyrantSensors::update();
+
+
+    TyrantSensors::ImuSample
+        sample {};
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getImuSnapshot(
+            sample
+        )
+    );
+
+
+    TEST_ASSERT_TRUE(
+        sample.valid
+    );
+
+
+    TEST_ASSERT_TRUE(
+        sample.mag_valid
+    );
+
+
+    TEST_ASSERT_TRUE(
+        sample.mag_updated
+    );
+
+
+    TEST_ASSERT_EQUAL_INT16(
+        100,
+        sample.mag_x_lsb
+    );
+
+    TEST_ASSERT_EQUAL_INT16(
+        -200,
+        sample.mag_y_lsb
+    );
+
+    TEST_ASSERT_EQUAL_INT16(
+        300,
+        sample.mag_z_lsb
+    );
+}
 void setup()
 {
     delay(2000);
@@ -243,9 +444,22 @@ void setup()
         test_imu_becomes_stale
     );
 
+    RUN_TEST(
+        test_imu_snapshot_is_non_destructive
+    );
 
-    UNITY_END();
-}
+
+    RUN_TEST(
+        test_imu_take_is_destructive_but_snapshot_remains
+    );
+    RUN_TEST(
+        test_nan_imu_rejected_from_estimator_stream
+    );
+    RUN_TEST(
+        test_imu_contains_9_axis_data
+    );
+        UNITY_END();
+    }
 
 
 void loop()

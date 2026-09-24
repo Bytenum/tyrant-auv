@@ -72,8 +72,14 @@ void test_pressure_ready_but_depth_not_zeroed()
     );
 
 
+    TyrantSensors::DepthMeasurement
+        depth {};
+
+
     TEST_ASSERT_TRUE(
-        pressure_health.valid
+        TyrantSensors::getDepthSnapshot(
+            depth
+        )
     );
 
 
@@ -82,13 +88,8 @@ void test_pressure_ready_but_depth_not_zeroed()
             depthSurfaceReferenceValid()
     );
 
-
-    TyrantSensors::DepthMeasurement
-        depth {};
-
-
     TEST_ASSERT_TRUE(
-        TyrantSensors::getLatestDepth(
+        TyrantSensors::getDepthSnapshot(
             depth
         )
     );
@@ -122,7 +123,7 @@ void test_set_surface_reference_gives_zero_depth()
 
 
     TEST_ASSERT_TRUE(
-        TyrantSensors::getLatestDepth(
+        TyrantSensors::getDepthSnapshot(
             depth
         )
     );
@@ -152,12 +153,12 @@ void test_one_meter_depth()
     );
 
 
-    // Consume depth=0 measurement produced
+    // Read the depth=0 snapshot produced
     // when the surface reference was set.
     TyrantSensors::DepthMeasurement
         zero_depth {};
 
-    TyrantSensors::getLatestDepth(
+    TyrantSensors::getDepthSnapshot(
         zero_depth
     );
 
@@ -177,7 +178,7 @@ void test_one_meter_depth()
 
 
     TEST_ASSERT_TRUE(
-        TyrantSensors::getLatestDepth(
+        TyrantSensors::getDepthSnapshot(
             depth
         )
     );
@@ -222,7 +223,7 @@ void test_clear_reference_invalidates_depth()
 
 
     TEST_ASSERT_TRUE(
-        TyrantSensors::getLatestDepth(
+        TyrantSensors::getDepthSnapshot(
             depth
         )
     );
@@ -248,7 +249,7 @@ void test_pressure_stale_invalidates_depth()
     TyrantSensors::DepthMeasurement
         initial_depth {};
 
-    TyrantSensors::getLatestDepth(
+    TyrantSensors::getDepthSnapshot(
         initial_depth
     );
 
@@ -283,7 +284,7 @@ void test_pressure_stale_invalidates_depth()
 
 
     TEST_ASSERT_TRUE(
-        TyrantSensors::getLatestDepth(
+        TyrantSensors::getDepthSnapshot(
             depth
         )
     );
@@ -292,8 +293,112 @@ void test_pressure_stale_invalidates_depth()
     TEST_ASSERT_FALSE(
         depth.valid
     );
+
+    TyrantSensors::DepthMeasurement
+        estimator_depth {};
+
+
+    TEST_ASSERT_FALSE(
+        TyrantSensors::takeDepthMeasurement(
+            estimator_depth
+        )
+    );
 }
 
+void test_depth_snapshot_is_non_destructive()
+{
+    preparePressureAtSurface();
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::
+            setDepthSurfaceReference()
+    );
+
+
+    TyrantSensors::DepthMeasurement
+        first_snapshot {};
+
+    TyrantSensors::DepthMeasurement
+        second_snapshot {};
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getDepthSnapshot(
+            first_snapshot
+        )
+    );
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getDepthSnapshot(
+            second_snapshot
+        )
+    );
+
+
+    TEST_ASSERT_EQUAL_UINT32(
+        first_snapshot.sequence,
+        second_snapshot.sequence
+    );
+
+
+    TEST_ASSERT_FLOAT_WITHIN(
+        0.001f,
+        first_snapshot.depth_m,
+        second_snapshot.depth_m
+    );
+}
+void test_depth_take_does_not_remove_snapshot()
+{
+    preparePressureAtSurface();
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::
+            setDepthSurfaceReference()
+    );
+
+
+    TyrantSensors::DepthMeasurement
+        estimator_measurement {};
+
+    TyrantSensors::DepthMeasurement
+        snapshot {};
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::takeDepthMeasurement(
+            estimator_measurement
+        )
+    );
+
+
+    TEST_ASSERT_FALSE(
+        TyrantSensors::takeDepthMeasurement(
+            estimator_measurement
+        )
+    );
+
+
+    TEST_ASSERT_TRUE(
+        TyrantSensors::getDepthSnapshot(
+            snapshot
+        )
+    );
+
+
+    TEST_ASSERT_EQUAL_UINT32(
+        estimator_measurement.sequence,
+        snapshot.sequence
+    );
+
+
+    TEST_ASSERT_EQUAL(
+        estimator_measurement.valid,
+        snapshot.valid
+    );
+}
 
 void setup()
 {
@@ -327,6 +432,14 @@ void setup()
         test_pressure_stale_invalidates_depth
     );
 
+    RUN_TEST(
+    test_depth_snapshot_is_non_destructive
+    );
+
+
+    RUN_TEST(
+        test_depth_take_does_not_remove_snapshot
+    );
 
     UNITY_END();
 }

@@ -369,6 +369,227 @@ void test_invalid_depth_measurement()
     );
 }
 
+void test_infinite_surface_pressure_rejected()
+{
+    TyrantSensors::DepthEstimator estimator(
+        TEST_WATER_DENSITY
+    );
+
+
+    TEST_ASSERT_FALSE(
+        estimator.setSurfacePressure(
+            INFINITY
+        )
+    );
+
+
+    TEST_ASSERT_FALSE(
+        estimator.surfaceReferenceValid()
+    );
+}
+
+void test_nan_surface_pressure_rejected()
+{
+    TyrantSensors::DepthEstimator estimator(
+        TEST_WATER_DENSITY
+    );
+
+
+    TEST_ASSERT_FALSE(
+        estimator.setSurfacePressure(
+            NAN
+        )
+    );
+
+
+    TEST_ASSERT_FALSE(
+        estimator.surfaceReferenceValid()
+    );
+}
+
+void test_nan_water_density_rejected()
+{
+    TyrantSensors::DepthEstimator estimator(
+        TEST_WATER_DENSITY
+    );
+
+
+    const float original_density =
+        estimator.getWaterDensity();
+
+
+    TEST_ASSERT_FALSE(
+        estimator.setWaterDensity(
+            NAN
+        )
+    );
+
+
+    TEST_ASSERT_FLOAT_WITHIN(
+        0.001f,
+        original_density,
+        estimator.getWaterDensity()
+    );
+}
+
+void test_nan_pressure_sample_rejected()
+{
+    TyrantSensors::DepthEstimator estimator(
+        TEST_WATER_DENSITY
+    );
+
+
+    TEST_ASSERT_TRUE(
+        estimator.setSurfacePressure(
+            TEST_SURFACE_PRESSURE_PA
+        )
+    );
+
+
+    auto sample =
+        makePressureSampleForDepth(
+            1.0f
+        );
+
+
+    sample.pressure_pa =
+        NAN;
+
+    sample.valid =
+        true;
+
+
+    float depth_m = 123.0f;
+
+
+    TEST_ASSERT_FALSE(
+        estimator.estimateDepth(
+            sample,
+            depth_m
+        )
+    );
+
+
+    TEST_ASSERT_FLOAT_WITHIN(
+        0.001f,
+        123.0f,
+        depth_m
+    );
+}
+
+void test_infinite_pressure_sample_rejected()
+{
+    TyrantSensors::DepthEstimator estimator(
+        TEST_WATER_DENSITY
+    );
+
+
+    TEST_ASSERT_TRUE(
+        estimator.setSurfacePressure(
+            TEST_SURFACE_PRESSURE_PA
+        )
+    );
+
+
+    auto sample =
+        makePressureSampleForDepth(
+            1.0f
+        );
+
+
+    sample.pressure_pa =
+        INFINITY;
+
+    sample.valid =
+        true;
+
+
+    float depth_m = 123.0f;
+
+
+    TEST_ASSERT_FALSE(
+        estimator.estimateDepth(
+            sample,
+            depth_m
+        )
+    );
+
+
+    TEST_ASSERT_FLOAT_WITHIN(
+        0.001f,
+        123.0f,
+        depth_m
+    );
+}
+void test_nan_pressure_produces_invalid_measurement()
+{
+    TyrantSensors::DepthEstimator estimator(
+        TEST_WATER_DENSITY
+    );
+
+
+    TEST_ASSERT_TRUE(
+        estimator.setSurfacePressure(
+            TEST_SURFACE_PRESSURE_PA
+        )
+    );
+
+
+    auto sample =
+        makePressureSampleForDepth(
+            1.0f
+        );
+
+
+    sample.sequence =
+        99;
+
+    sample.timestamp_us =
+        7654321;
+
+    sample.pressure_pa =
+        NAN;
+
+    sample.valid =
+        true;
+
+
+    TyrantSensors::DepthMeasurement
+        measurement {};
+
+
+    TEST_ASSERT_FALSE(
+        estimator.estimateMeasurement(
+            sample,
+            measurement
+        )
+    );
+
+
+    TEST_ASSERT_FALSE(
+        measurement.valid
+    );
+
+
+    TEST_ASSERT_FLOAT_WITHIN(
+        0.001f,
+        0.0f,
+        measurement.depth_m
+    );
+
+
+    TEST_ASSERT_EQUAL_UINT32(
+        99,
+        measurement.sequence
+    );
+
+
+    TEST_ASSERT_EQUAL_UINT64(
+        7654321,
+        measurement.timestamp_us
+    );
+}
+
 void setup()
 {
     delay(2000);
@@ -414,7 +635,34 @@ void setup()
     RUN_TEST(
         test_invalid_depth_measurement
     );
+    RUN_TEST(
+        test_nan_surface_pressure_rejected
+    );
 
+
+    RUN_TEST(
+        test_infinite_surface_pressure_rejected
+    );
+
+
+    RUN_TEST(
+        test_nan_water_density_rejected
+    );
+
+
+    RUN_TEST(
+        test_nan_pressure_sample_rejected
+    );
+
+
+    RUN_TEST(
+        test_infinite_pressure_sample_rejected
+    );
+
+
+    RUN_TEST(
+        test_nan_pressure_produces_invalid_measurement
+    );
 
     UNITY_END();
 }
